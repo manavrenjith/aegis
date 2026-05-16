@@ -17,7 +17,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-public class SettingsActivity extends AppCompatActivity implements SharedPreferences.OnSharedPreferenceChangeListener {
+public class SettingsActivity extends BaseActivity implements SharedPreferences.OnSharedPreferenceChangeListener {
 
     private static final String TAG = "Aegis.Settings";
     private boolean running = false;
@@ -34,6 +34,7 @@ public class SettingsActivity extends AppCompatActivity implements SharedPrefere
 		AegisUtils.setTheme(this);
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_settings);
+        setupBottomNav();
 		running = true;
 
 		ImageButton ibBack = findViewById(R.id.ibBack);

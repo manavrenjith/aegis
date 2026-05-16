@@ -117,9 +117,14 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:paddingBottom="72dp"
             android:scrollbars="vertical" />
     </com.google.android.material.card.MaterialCardView>
+
+    <!-- Bottom navigation -->
+    <include
+        layout="@layout/layout_bottom_nav"
+        android:layout_gravity="bottom" />
 
     <!-- Popup anchor — kept for existing code that uses R.id.vwPopupAnchor -->
     <View

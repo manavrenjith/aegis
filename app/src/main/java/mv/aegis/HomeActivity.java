@@ -33,7 +33,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class HomeActivity extends AppCompatActivity {
+public class HomeActivity extends BaseActivity {
 
     public static final String ACTION_RULES_CHANGED = "mv.aegis.RULES_CHANGED";
     public static final String ACTION_QUEUE_CHANGED = "mv.aegis.QUEUE_CHANGED";
@@ -60,9 +60,10 @@ public class HomeActivity extends AppCompatActivity {
     };
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+        setupBottomNav();
         running = true;
 
         boolean enabled = PreferenceManager.getDefaultSharedPreferences(this)

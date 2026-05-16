@@ -21,7 +21,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.mv.aegis.R;
 
-public class AppListActivity extends AppCompatActivity {
+public class AppListActivity extends BaseActivity {
     private static final String TAG = "Aegis.Activity";
     private static final long REFRESH_INTERVAL_MS = 3000L;
 
@@ -50,10 +50,11 @@ public class AppListActivity extends AppCompatActivity {
     };
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         AegisUtils.setTheme(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_activity);
+        setupBottomNav();
         running = true;
 
         if (getSupportActionBar() != null) {

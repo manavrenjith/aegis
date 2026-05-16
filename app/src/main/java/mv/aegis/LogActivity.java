@@ -28,7 +28,7 @@ import com.mv.aegis.R;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class LogActivity extends AppCompatActivity {
+public class LogActivity extends BaseActivity {
 
     private static final String TAG = "Aegis.Log";
     private static final long REFRESH_INTERVAL_MS = 2000L;
@@ -64,6 +64,7 @@ public class LogActivity extends AppCompatActivity {
         AegisUtils.setTheme(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.logging);
+        setupBottomNav();
 
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
