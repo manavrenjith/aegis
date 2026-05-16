@@ -25,32 +25,10 @@
         android:paddingTop="20dp"
         android:paddingBottom="12dp">
 
-        <!-- Back / up arrow button -->
-        <FrameLayout
-            android:id="@+id/flBack"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/bg_icon_button"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent">
-
-            <ImageButton
-                android:id="@+id/ibBack"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@android:string/cancel"
-                android:padding="9dp"
-                android:src="@drawable/ic_arrow_back_black_24dp"
-                app:tint="@color/color_label_secondary" />
-        </FrameLayout>
-
         <!-- Large bold title -->
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
             android:fontFamily="sans-serif-medium"
             android:text="@string/menu_settings"
             android:textColor="@color/md_theme_onBackground"
@@ -58,7 +36,7 @@
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/flBack"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>

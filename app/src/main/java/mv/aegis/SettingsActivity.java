@@ -41,8 +41,6 @@ public class SettingsActivity extends BaseActivity implements SharedPreferences.
         }
 		running = true;
 
-		ImageButton ibBack = findViewById(R.id.ibBack);
-		ibBack.setOnClickListener(v -> finish());
 
 		if (getSupportActionBar() != null) {
 			getSupportActionBar().hide();

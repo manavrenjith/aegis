@@ -65,10 +65,6 @@ public class AppListActivity extends BaseActivity {
             getSupportActionBar().hide();
         }
 
-        ImageButton ibBack = findViewById(R.id.ibBack);
-        if (ibBack != null) {
-            ibBack.setOnClickListener(v -> finish());
-        }
 
         ImageButton ibResetUsage = findViewById(R.id.ibResetUsage);
         if (ibResetUsage != null) {
