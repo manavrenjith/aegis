@@ -130,18 +130,6 @@ public class HomeActivity extends BaseActivity {
 
         setActiveChip(chipAll, chipBlocked, chipWifiOnly, chipDataOnly, chipAllowed);
 
-        LinearLayout tabHome = findViewById(R.id.tabHome);
-        LinearLayout tabActivity = findViewById(R.id.tabActivity);
-        LinearLayout tabLog = findViewById(R.id.tabLog);
-        LinearLayout tabSettings = findViewById(R.id.tabSettings);
-
-        tabHome.setOnClickListener(view -> {
-            // Already on home.
-        });
-        tabActivity.setOnClickListener(view -> startActivity(new Intent(this, AppListActivity.class)));
-        tabLog.setOnClickListener(view -> startActivity(new Intent(this, LogActivity.class)));
-        tabSettings.setOnClickListener(view -> startActivity(new Intent(this, SettingsActivity.class)));
-
         TextView tvDisabled = findViewById(R.id.tvDisabled);
         tvDisabled.setVisibility(enabled ? View.GONE : View.VISIBLE);
 
