@@ -65,6 +65,10 @@ public class LogActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.logging);
         setupBottomNav();
+        com.google.android.material.bottomnavigation.BottomNavigationView bottomNav = findViewById(R.id.bottomNav);
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_log);
+        }
 
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {

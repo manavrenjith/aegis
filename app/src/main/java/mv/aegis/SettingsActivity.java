@@ -35,6 +35,10 @@ public class SettingsActivity extends BaseActivity implements SharedPreferences.
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_settings);
         setupBottomNav();
+        com.google.android.material.bottomnavigation.BottomNavigationView bottomNav = findViewById(R.id.bottomNav);
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_settings);
+        }
 		running = true;
 
 		ImageButton ibBack = findViewById(R.id.ibBack);

@@ -55,6 +55,10 @@ public class AppListActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_activity);
         setupBottomNav();
+        com.google.android.material.bottomnavigation.BottomNavigationView bottomNav = findViewById(R.id.bottomNav);
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_activity);
+        }
         running = true;
 
         if (getSupportActionBar() != null) {
