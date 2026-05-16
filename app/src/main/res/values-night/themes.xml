@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+    ═══════════════════════════════════════════════════════════════════════════
+    Aegis — iOS-inspired M3 Dark Theme
+    Base:  Theme.Material3.Dark.NoActionBar
+    Dark surface strategy:
+      Background  → #1C1C1E  (iOS system grouped background dark)
+      Cards/sheets → #2C2C2E  (iOS system background dark)
+      Elevated    → #3A3A3C  (iOS tertiary system grouped dark)
+    ═══════════════════════════════════════════════════════════════════════════
+    -->
+    <style name="Theme.Aegis" parent="Theme.Material3.Dark.NoActionBar">
+
+        <!-- ═══════════════════════════════════════════════
+             M3 PRIMARY ROLE (dark)
+             ═══════════════════════════════════════════════ -->
+        <item name="colorPrimary">@color/md_theme_primary</item>
+        <item name="colorOnPrimary">@color/md_theme_onPrimary</item>
+        <item name="colorPrimaryContainer">@color/md_theme_primaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/md_theme_onPrimaryContainer</item>
+        <item name="colorPrimaryFixed">@color/md_theme_primaryFixed</item>
+        <item name="colorPrimaryFixedDim">@color/md_theme_primaryFixedDim</item>
+        <item name="colorOnPrimaryFixed">@color/md_theme_onPrimaryFixed</item>
+        <item name="colorOnPrimaryFixedVariant">@color/md_theme_onPrimaryFixedVariant</item>
+
+        <!-- ═══════════════════════════════════════════════
+             M3 SECONDARY ROLE (dark)
+             ═══════════════════════════════════════════════ -->
+        <item name="colorSecondary">@color/md_theme_secondary</item>
+        <item name="colorOnSecondary">@color/md_theme_onSecondary</item>
+        <item name="colorSecondaryContainer">@color/md_theme_secondaryContainer</item>
+        <item name="colorOnSecondaryContainer">@color/md_theme_onSecondaryContainer</item>
+        <item name="colorSecondaryFixed">@color/md_theme_secondaryFixed</item>
+        <item name="colorSecondaryFixedDim">@color/md_theme_secondaryFixedDim</item>
+        <item name="colorOnSecondaryFixed">@color/md_theme_onSecondaryFixed</item>
+        <item name="colorOnSecondaryFixedVariant">@color/md_theme_onSecondaryFixedVariant</item>
+
+        <!-- ═══════════════════════════════════════════════
+             M3 TERTIARY ROLE (dark)
+             iOS system blue dark (#0A84FF)
+             ═══════════════════════════════════════════════ -->
+        <item name="colorTertiary">@color/md_theme_tertiary</item>
+        <item name="colorOnTertiary">@color/md_theme_onTertiary</item>
+        <item name="colorTertiaryContainer">@color/md_theme_tertiaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/md_theme_onTertiaryContainer</item>
+        <item name="colorTertiaryFixed">@color/md_theme_tertiaryFixed</item>
+        <item name="colorTertiaryFixedDim">@color/md_theme_tertiaryFixedDim</item>
+        <item name="colorOnTertiaryFixed">@color/md_theme_onTertiaryFixed</item>
+        <item name="colorOnTertiaryFixedVariant">@color/md_theme_onTertiaryFixedVariant</item>
+
+        <!-- ═══════════════════════════════════════════════
+             M3 ERROR ROLE (dark)
+             iOS system red dark (#FF453A)
+             ═══════════════════════════════════════════════ -->
+        <item name="colorError">@color/md_theme_error</item>
+        <item name="colorOnError">@color/md_theme_onError</item>
+        <item name="colorErrorContainer">@color/md_theme_errorContainer</item>
+        <item name="colorOnErrorContainer">@color/md_theme_onErrorContainer</item>
+
+        <!-- ═══════════════════════════════════════════════
+             M3 BACKGROUND (dark)
+             #1C1C1E — iOS system grouped background
+             ═══════════════════════════════════════════════ -->
+        <item name="android:colorBackground">@color/md_theme_background</item>
+        <item name="colorOnBackground">@color/md_theme_onBackground</item>
+
+        <!-- ═══════════════════════════════════════════════
+             M3 SURFACE ROLES (dark)
+             ═══════════════════════════════════════════════ -->
+        <item name="colorSurface">@color/md_theme_surface</item>
+        <item name="colorOnSurface">@color/md_theme_onSurface</item>
+        <item name="colorSurfaceVariant">@color/md_theme_surfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/md_theme_onSurfaceVariant</item>
+        <item name="colorSurfaceInverse">@color/md_theme_inverseSurface</item>
+        <item name="colorOnSurfaceInverse">@color/md_theme_inverseOnSurface</item>
+        <item name="colorPrimaryInverse">@color/md_theme_inversePrimary</item>
+
+        <!-- M3 surface container tiers (dark) -->
+        <item name="colorSurfaceBright">@color/md_theme_surfaceBright</item>
+        <item name="colorSurfaceDim">@color/md_theme_surfaceDim</item>
+        <item name="colorSurfaceContainerLowest">@color/md_theme_surfaceContainerLowest</item>
+        <item name="colorSurfaceContainerLow">@color/md_theme_surfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/md_theme_surfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/md_theme_surfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/md_theme_surfaceContainerHighest</item>
+
+        <!-- ═══════════════════════════════════════════════
+             M3 OUTLINE (dark)
+             ═══════════════════════════════════════════════ -->
+        <item name="colorOutline">@color/md_theme_outline</item>
+        <item name="colorOutlineVariant">@color/md_theme_outlineVariant</item>
+
+        <!-- ═══════════════════════════════════════════════
+             WINDOW / STATUS BAR / NAV BAR (dark)
+             Dark mode: light icons on dark status bar
+             ═══════════════════════════════════════════════ -->
+        <item name="android:windowBackground">@color/md_theme_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDisablePreview">true</item>
+        <!-- API 23+: windowLightStatusBar → values-v23-night/themes.xml -->
+        <!-- API 27+: windowLightNavigationBar → values-v27-night/themes.xml -->
+        <!-- API 29+: enforceStatusBarContrast/NavigationBarContrast → values-v29-night/themes.xml -->
+        <!-- API 35+: windowOptOutEdgeToEdgeEnforcement → values-v35-night/themes.xml -->
+
+        <!-- ═══════════════════════════════════════════════
+             NETGUARD CUSTOM ATTRIBUTES (dark)
+             ═══════════════════════════════════════════════ -->
+        <item name="colorOn">@color/color_on</item>
+        <item name="colorOff">@color/color_off</item>
+        <!-- Icon set: white icons on dark background -->
+        <item name="expander">@drawable/expander_white</item>
+        <item name="iconQueue">@drawable/ic_hourglass_empty_white_24dp</item>
+        <item name="iconMetered">@drawable/ic_attach_money_white_24dp</item>
+        <item name="iconSettings">@drawable/ic_settings_white_24dp</item>
+        <item name="iconDatasaver">@drawable/ic_perm_data_setting_white_24dp</item>
+        <item name="iconLaunch">@drawable/ic_launch_white_24dp</item>
+        <item name="iconDelete">@drawable/ic_delete_white_24dp</item>
+        <item name="iconPlay">@drawable/ic_play_arrow_white_24dp</item>
+        <item name="iconPause">@drawable/ic_pause_white_24dp</item>
+
+        <!-- ═══════════════════════════════════════════════
+             MATERIAL COMPONENTS OVERRIDES (dark)
+             Flat iOS look — no tonal elevation tinting
+             ═══════════════════════════════════════════════ -->
+        <item name="materialCardViewStyle">@style/Widget.Material3.CardView.Elevated</item>
+        <item name="colorControlHighlight">#1AFFFFFF</item>
+        <item name="elevationOverlayEnabled">false</item>
+        <!-- Override surface containers to dark gray — no purple tinting -->
+        <item name="colorSurface">@color/color_surface_card</item>
+        <item name="colorSurfaceVariant">@color/md_theme_background</item>
+        <item name="colorSurfaceContainer">@color/md_theme_background</item>
+        <item name="colorSurfaceContainerLow">@color/md_theme_background</item>
+        <item name="colorSurfaceContainerHigh">@color/md_theme_background</item>
+        <item name="colorSurfaceContainerHighest">@color/md_theme_background</item>
+
+    </style>
+
+
+    <!--
+    ═══════════════════════════════════════════════════════════════════════════
+    AppDialog — dark variant
+    ═══════════════════════════════════════════════════════════════════════════
+    -->
+
+</resources>
+
+

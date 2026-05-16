@@ -1,0 +1,8 @@
+<resources>
+
+    <!-- iOS design system dimensions -->
+    <dimen name="ios_app_icon_size">46dp</dimen>
+    <dimen name="ios_toggle_btn_size">32dp</dimen>
+    <dimen name="ios_app_name_size">15sp</dimen>
+    <dimen name="ios_package_name_size">12sp</dimen>
+</resources>

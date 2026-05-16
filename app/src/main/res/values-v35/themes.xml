@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 35+: opt out of Android 15 forced edge-to-edge so app handles insets -->
+</resources>

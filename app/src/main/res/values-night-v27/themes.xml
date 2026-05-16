@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        values-v27-night/themes.xml
+        windowLightStatusBar=false and windowLightNavigationBar=false are both
+        the defaults for Theme.Material3.Dark — no override required.
+    -->
+    <!-- API 27+ dark: dark nav bar icons off, transparent status, dark nav bg -->
+    <style name="Theme.Aegis" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/md_theme_background</item>
+    </style>
+</resources>

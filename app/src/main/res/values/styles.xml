@@ -1,0 +1,68 @@
+<resources>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         CUSTOM ATTRIBUTE DECLARATIONS
+         Referenced by themes.xml (colorOn/colorOff) and AdapterRule/ActivityMain
+         ═══════════════════════════════════════════════════════════════════ -->
+    <attr name="colorOn" format="reference" />
+    <attr name="colorOff" format="reference" />
+    <attr name="expander" format="reference" />
+    <attr name="iconQueue" format="reference" />
+    <attr name="iconMetered" format="reference" />
+    <attr name="iconSettings" format="reference" />
+    <attr name="iconDatasaver" format="reference" />
+    <attr name="iconLaunch" format="reference" />
+    <attr name="iconDelete" format="reference" />
+    <attr name="iconPlay" format="reference" />
+    <attr name="iconPause" format="reference" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         DIALOG THEME
+         Used by activities that launch dialogs (AndroidManifest android:theme)
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+          PREFERENCE SCREEN THEME OVERRIDE
+         Applied via preferenceTheme in AppThemeTeal.
+         Extends the standard Material preference overlay so standard
+         Preference/CheckBoxPreference/SwitchPreference all pick up the
+         iOS palette: white card surface, #1C1C1E titles, #636366 summaries.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <style name="AegisPreferenceTheme" parent="PreferenceThemeOverlay.v14.Material">
+        <!-- Category title / summary color -->
+        <item name="android:textColorSecondary">@color/color_label_secondary</item>
+        <!-- Remove left icon-space gap on every row -->
+        <item name="iconSpaceReserved">false</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         WIDGET STYLES
+         ═══════════════════════════════════════════════════════════════════ -->
+    <style name="RoundedIcon" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         TEXT APPEARANCE STYLES
+         Used by rule.xml, logging.xml, log.xml, legend.xml, pro.xml etc.
+         NOTE: Use @color/ tokens only — NO ?attr/ refs — these styles are
+         inflated by activities that may run under Theme.AppCompat.Empty
+         (e.g. ActivityLog) which has no M3 colorOnSurface attributes.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <!-- Small helper/caption text — 12sp, secondary label color -->
+    <style name="TextSmall" parent="TextAppearance.AppCompat.Small">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/md_theme_onSurfaceVariant</item>
+    </style>
+
+    <!-- Medium body text — 14sp, primary text color -->
+
+    <!-- Section header / label text — 14sp bold, primary text color -->
+    <style name="TextTitle" parent="TextAppearance.AppCompat.Medium">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/md_theme_onSurface</item>
+    </style>
+
+</resources>

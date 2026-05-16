@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+
+    <!-- =======================================================================
+         M3 PRIMARY ROLE
+         Near-black — used for primary interactive elements (toggles, FABs, etc.)
+         ======================================================================= -->
+    <color name="md_theme_primary">#1C1C1E</color>
+    <color name="md_theme_onPrimary">#FFFFFF</color>
+    <color name="md_theme_primaryContainer">#E5E5EA</color>
+    <color name="md_theme_onPrimaryContainer">#1C1C1E</color>
+
+    <!-- Fixed variants (M3 — same in both light and dark) -->
+    <color name="md_theme_primaryFixed">#E5E5EA</color>
+    <color name="md_theme_primaryFixedDim">#C7C7CC</color>
+    <color name="md_theme_onPrimaryFixed">#1C1C1E</color>
+    <color name="md_theme_onPrimaryFixedVariant">#3A3A3C</color>
+
+    <!-- =======================================================================
+         M3 SECONDARY ROLE
+         Mid-gray — labels, captions, secondary actions
+         ======================================================================= -->
+    <color name="md_theme_secondary">#636366</color>
+    <color name="md_theme_onSecondary">#FFFFFF</color>
+    <color name="md_theme_secondaryContainer">#F2F2F7</color>
+    <color name="md_theme_onSecondaryContainer">#3A3A3C</color>
+
+    <color name="md_theme_secondaryFixed">#F2F2F7</color>
+    <color name="md_theme_secondaryFixedDim">#E5E5EA</color>
+    <color name="md_theme_onSecondaryFixed">#3A3A3C</color>
+    <color name="md_theme_onSecondaryFixedVariant">#636366</color>
+
+    <!-- =======================================================================
+         M3 TERTIARY ROLE
+         iOS blue — used sparingly for links, active chips, bottom nav active item
+         ======================================================================= -->
+    <color name="md_theme_tertiary">#007AFF</color>
+    <color name="md_theme_onTertiary">#FFFFFF</color>
+    <color name="md_theme_tertiaryContainer">#E8F1FF</color>
+    <color name="md_theme_onTertiaryContainer">#004DB3</color>
+
+    <color name="md_theme_tertiaryFixed">#E8F1FF</color>
+    <color name="md_theme_tertiaryFixedDim">#C5DCFF</color>
+    <color name="md_theme_onTertiaryFixed">#003D99</color>
+    <color name="md_theme_onTertiaryFixedVariant">#0056CC</color>
+
+    <!-- =======================================================================
+         M3 ERROR ROLE
+         iOS danger red
+         ======================================================================= -->
+    <color name="md_theme_error">#FF3B30</color>
+    <color name="md_theme_onError">#FFFFFF</color>
+    <color name="md_theme_errorContainer">#FFE5E3</color>
+    <color name="md_theme_onErrorContainer">#7D0000</color>
+
+    <!-- =======================================================================
+         M3 BACKGROUND & SURFACE
+         Page bg = iOS system grouped background (#F2F2F7)
+         Surface  = pure white (cards, sheets, dialogs)
+         ======================================================================= -->
+    <color name="md_theme_background">#F2F2F7</color>
+    <color name="md_theme_onBackground">#1C1C1E</color>
+
+    <color name="md_theme_surface">#FFFFFF</color>
+    <color name="md_theme_onSurface">#1C1C1E</color>
+    <color name="md_theme_surfaceVariant">#F2F2F7</color>
+    <color name="md_theme_onSurfaceVariant">#636366</color>
+
+    <!-- Inverse surface (snackbars, tooltips) -->
+    <color name="md_theme_inverseSurface">#1C1C1E</color>
+    <color name="md_theme_inverseOnSurface">#F2F2F7</color>
+    <color name="md_theme_inversePrimary">#E5E5EA</color>
+
+    <!-- =======================================================================
+         M3 SURFACE CONTAINER ROLES (elevation tiers, all white-family in light)
+         ======================================================================= -->
+    <color name="md_theme_surfaceBright">#FFFFFF</color>
+    <color name="md_theme_surfaceDim">#DFDFE4</color>
+    <color name="md_theme_surfaceContainerLowest">#FFFFFF</color>
+    <color name="md_theme_surfaceContainerLow">#F8F8FB</color>
+    <color name="md_theme_surfaceContainer">#F2F2F7</color>
+    <color name="md_theme_surfaceContainerHigh">#EAEAEF</color>
+    <color name="md_theme_surfaceContainerHighest">#E5E5EA</color>
+    <!--====================fix=============================-->
+    <color name="switch_thumb_tint">#FF6200EE</color>
+    <color name="switch_track_tint">#80BB86FC</color>
+    <!-- =======================================================================
+         M3 OUTLINE
+         ======================================================================= -->
+    <color name="md_theme_outline">#C7C7CC</color>
+    <color name="md_theme_outlineVariant">#E5E5EA</color>
+
+    <!-- =======================================================================
+         M3 SCRIM / SHADOW
+         ======================================================================= -->
+
+    <!-- =======================================================================
+         NETGUARD SEMANTIC — FIREWALL STATE
+         iOS green  → allowed / protected / on
+         iOS red    → blocked / unprotected / off
+         ======================================================================= -->
+    <color name="color_on">#34C759</color>
+    <color name="color_off">#FF3B30</color>
+
+    <!-- =======================================================================
+         NETGUARD SEMANTIC — STATUS BADGE BACKGROUNDS
+         Very light tint pill behind the state label
+         ======================================================================= -->
+    <color name="color_status_active_bg">#E8F9ED</color>
+    <color name="color_status_inactive_bg">#FFE5E3</color>
+
+    <!-- =======================================================================
+         NETGUARD SEMANTIC — CARD SURFACE
+         Pure white card on top of #F2F2F7 page background
+         ======================================================================= -->
+    <color name="color_surface_card">#FFFFFF</color>
+
+    <!-- =======================================================================
+         TYPOGRAPHY — iOS label hierarchy
+         ======================================================================= -->
+    <color name="color_label_primary">#1C1C1E</color>
+    <color name="color_label_secondary">#636366</color>
+    <color name="color_label_tertiary">#AEAEB2</color>
+
+    <!-- =======================================================================
+         INTERACTIVE — accent blue (used sparingly: links, chips, bottom nav)
+         ======================================================================= -->
+    <color name="color_accent_blue">#007AFF</color>
+
+    <!-- =======================================================================
+         APP ROW — PER-APP TOGGLE BUTTONS
+         WiFi toggle (blue family)
+         ======================================================================= -->
+    <color name="color_wifi_active_bg">#E8F1FF</color>
+
+    <!-- Mobile data toggle (green family) -->
+    <color name="color_data_active_bg">#E8F9ED</color>
+
+    <!-- Shared inactive state (both toggles) -->
+
+    <!-- =======================================================================
+         SEPARATOR / DIVIDER
+         ======================================================================= -->
+    <color name="color_separator">#E5E5EA</color>
+
+    <!-- =======================================================================
+         BOTTOM NAVIGATION BAR
+         ======================================================================= -->
+    <color name="color_bottom_nav_bg">#FFFFFF</color>
+
+    <!-- =======================================================================
+         TRAFFIC LOG — send / receive indicator dots
+         ======================================================================= -->
+
+    <!-- =======================================================================
+         GRAYED / SYSTEM APP TINT
+         ======================================================================= -->
+    <color name="colorGrayed">#AEAEB2</color>
+
+    <!-- =======================================================================
+         LEGACY ALIASES
+         Keeps existing Java/XML references intact during incremental migration.
+         Remove once all call sites are updated to the new token names above.
+         ======================================================================= -->
+
+    <!-- Legacy per-theme On/Off colors — all unified to iOS green/red -->
+
+    <!-- Legacy ios_* aliases (referenced by existing layout/Java files) -->
+    <color name="ios_warning_orange">#FF9500</color>
+    <color name="ios_wifi_active_bg">@color/color_wifi_active_bg</color>
+    <color name="ios_mobile_active_bg">@color/color_data_active_bg</color>
+
+</resources>

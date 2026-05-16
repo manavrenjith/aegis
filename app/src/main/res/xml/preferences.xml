@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:app="http://schemas.android.com/apk/res-auto">
+
+	<PreferenceScreen
+		app:key="screen_defaults"
+		app:title="@string/setting_defaults">
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="whitelist_wifi"
+			app:defaultValue="true"
+			app:title="@string/setting_whitelist_wifi" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="whitelist_other"
+			app:defaultValue="true"
+			app:title="@string/setting_whitelist_other" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="screen_on"
+			app:defaultValue="true"
+			app:title="@string/setting_screen_on" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="screen_wifi"
+			app:defaultValue="false"
+			app:dependency="screen_on"
+			app:title="@string/setting_screen_wifi" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="screen_other"
+			app:defaultValue="false"
+			app:dependency="screen_on"
+			app:title="@string/setting_screen_other" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="whitelist_roaming"
+			app:defaultValue="true"
+			app:title="@string/setting_whitelist_roaming" />
+	</PreferenceScreen>
+
+	<PreferenceScreen
+		app:key="screen_options"
+		app:title="@string/setting_options">
+
+		<ListPreference
+			app:key="theme_mode"
+			app:defaultValue="-1"
+			app:entries="@array/themeModeNames"
+			app:entryValues="@array/themeModeValues"
+			app:title="@string/setting_theme_mode"
+			app:summary="@string/summary_theme_mode" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="install"
+			app:defaultValue="true"
+			app:title="@string/setting_install"
+			app:summary="@string/summary_install" />
+
+		<EditTextPreference
+			app:key="auto_enable"
+			app:defaultValue="0"
+			app:summary="@string/summary_auto"
+			android:inputType="number" />
+
+		<EditTextPreference
+			app:key="screen_delay"
+			app:defaultValue="0"
+			app:summary="@string/summary_delay"
+			android:inputType="number" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="update_check"
+			app:defaultValue="true"
+			app:title="@string/setting_update"
+			app:summary="@string/summary_update" />
+	</PreferenceScreen>
+
+	<PreferenceScreen
+		app:key="screen_advanced_options"
+		app:title="@string/setting_advanced_options">
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="manage_system"
+			app:defaultValue="false"
+			app:title="@string/setting_system"
+			app:summary="@string/summary_system" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="log_app"
+			app:defaultValue="false"
+			app:title="@string/setting_log_app"
+			app:summary="@string/summary_log_app" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="notify_access"
+			app:defaultValue="false"
+			app:dependency="log_app"
+			app:title="@string/setting_access"
+			app:summary="@string/summary_access" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="filter"
+			app:defaultValue="false"
+			app:title="@string/setting_filter"
+			app:summary="@string/summary_filter" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="filter_udp"
+			app:defaultValue="false"
+			app:dependency="filter"
+			app:title="@string/setting_filter_udp" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="handover"
+			app:defaultValue="false"
+			app:dependency="filter"
+			app:title="@string/setting_handover" />
+
+		<androidx.preference.SwitchPreferenceCompat
+			app:key="track_usage"
+			app:defaultValue="false"
+			app:dependency="filter"
+			app:title="@string/setting_track_usage"
+			app:summary="@string/summary_track_usage" />
+
+		<Preference
+			app:key="reset_usage"
+			app:title="@string/setting_reset_usage" />
+	</PreferenceScreen>
+
+</PreferenceScreen>
+

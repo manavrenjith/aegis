@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- =======================================================================
+         DARK MODE — iOS-inspired true dark gray (not pure black)
+         Base surface:  #1C1C1E  (iOS system grouped background dark)
+         Card surface:  #2C2C2E  (iOS system background dark)
+         Elevated card: #3A3A3C  (iOS tertiary system grouped background dark)
+         Text primary:  #FFFFFF
+         Text secondary:#EBEBF5 @ 60% → #8E8E93 solid approximation
+         Separator:     #38383A
+         ======================================================================= -->
+
+    <!-- =======================================================================
+         M3 PRIMARY ROLE (dark)
+         ======================================================================= -->
+    <color name="md_theme_primary">#E5E5EA</color>
+    <color name="md_theme_onPrimary">#1C1C1E</color>
+    <color name="md_theme_primaryContainer">#3A3A3C</color>
+    <color name="md_theme_onPrimaryContainer">#E5E5EA</color>
+
+    <!-- Fixed variants stay the same as light (M3 spec) -->
+    <color name="md_theme_primaryFixed">#E5E5EA</color>
+    <color name="md_theme_primaryFixedDim">#C7C7CC</color>
+    <color name="md_theme_onPrimaryFixed">#1C1C1E</color>
+    <color name="md_theme_onPrimaryFixedVariant">#3A3A3C</color>
+
+    <!-- =======================================================================
+         M3 SECONDARY ROLE (dark)
+         ======================================================================= -->
+    <color name="md_theme_secondary">#8E8E93</color>
+    <color name="md_theme_onSecondary">#1C1C1E</color>
+    <color name="md_theme_secondaryContainer">#3A3A3C</color>
+    <color name="md_theme_onSecondaryContainer">#E5E5EA</color>
+
+    <color name="md_theme_secondaryFixed">#F2F2F7</color>
+    <color name="md_theme_secondaryFixedDim">#E5E5EA</color>
+    <color name="md_theme_onSecondaryFixed">#3A3A3C</color>
+    <color name="md_theme_onSecondaryFixedVariant">#636366</color>
+
+    <!-- =======================================================================
+         M3 TERTIARY ROLE (dark)
+         iOS blue stays recognizable but slightly brighter in dark
+         ======================================================================= -->
+    <color name="md_theme_tertiary">#0A84FF</color>
+    <color name="md_theme_onTertiary">#FFFFFF</color>
+    <color name="md_theme_tertiaryContainer">#003070</color>
+    <color name="md_theme_onTertiaryContainer">#C5DCFF</color>
+
+    <color name="md_theme_tertiaryFixed">#E8F1FF</color>
+    <color name="md_theme_tertiaryFixedDim">#C5DCFF</color>
+    <color name="md_theme_onTertiaryFixed">#003D99</color>
+    <color name="md_theme_onTertiaryFixedVariant">#0056CC</color>
+
+    <!-- =======================================================================
+         M3 ERROR ROLE (dark)
+         iOS danger red is slightly brighter in dark mode
+         ======================================================================= -->
+    <color name="md_theme_error">#FF453A</color>
+    <color name="md_theme_onError">#FFFFFF</color>
+    <color name="md_theme_errorContainer">#5C0000</color>
+    <color name="md_theme_onErrorContainer">#FFB4AB</color>
+
+    <!-- =======================================================================
+         M3 BACKGROUND & SURFACE (dark)
+         Page bg  = #1C1C1E (iOS system grouped background)
+         Surface  = #2C2C2E (iOS secondary system background — feels like a card)
+         ======================================================================= -->
+    <color name="md_theme_background">#1C1C1E</color>
+    <color name="md_theme_onBackground">#FFFFFF</color>
+
+    <color name="md_theme_surface">#2C2C2E</color>
+    <color name="md_theme_onSurface">#FFFFFF</color>
+    <color name="md_theme_surfaceVariant">#3A3A3C</color>
+    <color name="md_theme_onSurfaceVariant">#8E8E93</color>
+
+    <!-- Inverse surface (snackbars on dark screens → light) -->
+    <color name="md_theme_inverseSurface">#E5E5EA</color>
+    <color name="md_theme_inverseOnSurface">#1C1C1E</color>
+    <color name="md_theme_inversePrimary">#3A3A3C</color>
+
+    <!-- =======================================================================
+         M3 SURFACE CONTAINER ROLES (dark elevation tiers)
+         Darker = lower elevation; lighter gray = higher elevation (M3 dark spec)
+         ======================================================================= -->
+    <color name="md_theme_surfaceBright">#48484A</color>
+    <color name="md_theme_surfaceDim">#1C1C1E</color>
+    <color name="md_theme_surfaceContainerLowest">#141416</color>
+    <color name="md_theme_surfaceContainerLow">#1C1C1E</color>
+    <color name="md_theme_surfaceContainer">#2C2C2E</color>
+    <color name="md_theme_surfaceContainerHigh">#3A3A3C</color>
+    <color name="md_theme_surfaceContainerHighest">#48484A</color>
+
+    <!-- =======================================================================
+         M3 OUTLINE (dark)
+         ======================================================================= -->
+    <color name="md_theme_outline">#48484A</color>
+    <color name="md_theme_outlineVariant">#38383A</color>
+
+    <!-- =======================================================================
+         M3 SCRIM / SHADOW (dark)
+         ======================================================================= -->
+
+    <!-- =======================================================================
+         NETGUARD SEMANTIC — FIREWALL STATE (dark)
+         iOS system green / red are slightly adjusted for dark backgrounds
+         ======================================================================= -->
+    <color name="color_on">#30D158</color>
+    <color name="color_off">#FF453A</color>
+
+    <!-- =======================================================================
+         NETGUARD SEMANTIC — STATUS BADGE BACKGROUNDS (dark)
+         Darker tint pill so it reads on #2C2C2E card surface
+         ======================================================================= -->
+    <color name="color_status_active_bg">#0D3320</color>
+    <color name="color_status_inactive_bg">#3D0E0A</color>
+
+    <!-- =======================================================================
+         NETGUARD SEMANTIC — CARD SURFACE (dark)
+         Cards sit on top of #1C1C1E page, so they use #2C2C2E
+         ======================================================================= -->
+    <color name="color_surface_card">#2C2C2E</color>
+
+    <!-- =======================================================================
+         TYPOGRAPHY — iOS dark label hierarchy
+         ======================================================================= -->
+    <color name="color_label_primary">#FFFFFF</color>
+    <color name="color_label_secondary">#8E8E93</color>
+    <color name="color_label_tertiary">#636366</color>
+
+    <!-- =======================================================================
+         INTERACTIVE — accent blue (dark: iOS system blue dark variant)
+         ======================================================================= -->
+    <color name="color_accent_blue">#0A84FF</color>
+
+    <!-- =======================================================================
+         APP ROW — PER-APP TOGGLE BUTTONS (dark)
+         WiFi toggle (blue family — darkened tint bg)
+         ======================================================================= -->
+    <color name="color_wifi_active_bg">#003070</color>
+
+    <!-- Mobile data toggle (green family — darkened tint bg) -->
+    <color name="color_data_active_bg">#0D3320</color>
+
+    <!-- Shared inactive state (both toggles) -->
+
+    <!-- =======================================================================
+         SEPARATOR / DIVIDER (dark)
+         ======================================================================= -->
+    <color name="color_separator">#38383A</color>
+
+    <!-- =======================================================================
+         BOTTOM NAVIGATION BAR (dark)
+         ======================================================================= -->
+    <color name="color_bottom_nav_bg">#2C2C2E</color>
+
+    <!-- =======================================================================
+         TRAFFIC LOG — send / receive indicator dots (dark)
+         ======================================================================= -->
+
+    <!-- =======================================================================
+         GRAYED / SYSTEM APP TINT (dark)
+         ======================================================================= -->
+    <color name="colorGrayed">#636366</color>
+
+    <!-- =======================================================================
+         LEGACY ALIASES (dark overrides)
+         ======================================================================= -->
+
+    <!-- Legacy per-theme On/Off — unified to iOS dark green/red -->
+
+    <!-- Legacy ios_* aliases (dark overrides) -->
+    <color name="ios_warning_orange">#FF9F0A</color>
+    <color name="ios_wifi_active_bg">@color/color_wifi_active_bg</color>
+    <color name="ios_mobile_active_bg">@color/color_data_active_bg</color>
+
+</resources>
+
