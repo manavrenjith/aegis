@@ -1,33 +1,41 @@
 package mv.aegis;
 
 import android.content.Intent;
-import android.view.View;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.mv.aegis.R;
 
 public class BaseActivity extends AppCompatActivity {
     protected void setupBottomNav() {
-        View tabHome = findViewById(R.id.tabHome);
-        if (tabHome != null) {
-            tabHome.setOnClickListener(v -> startActivity(new Intent(this, HomeActivity.class)));
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNav);
+        if (bottomNav == null) {
+            return;
         }
 
-        View tabLog = findViewById(R.id.tabLog);
-        if (tabLog != null) {
-            tabLog.setOnClickListener(v -> startActivity(new Intent(this, LogActivity.class)));
-        }
+        bottomNav.setOnItemSelectedListener(item -> {
+            Class<?> target = null;
+            int itemId = item.getItemId();
+            if (itemId == R.id.nav_home) {
+                target = HomeActivity.class;
+            } else if (itemId == R.id.nav_activity) {
+                target = AppListActivity.class;
+            } else if (itemId == R.id.nav_log) {
+                target = LogActivity.class;
+            } else if (itemId == R.id.nav_settings) {
+                target = SettingsActivity.class;
+            }
 
-        View tabActivity = findViewById(R.id.tabActivity);
-        if (tabActivity != null) {
-            tabActivity.setOnClickListener(v -> startActivity(new Intent(this, AppListActivity.class)));
-        }
+            if (target == null || getClass().equals(target)) {
+                return true;
+            }
 
-        View tabSettings = findViewById(R.id.tabSettings);
-        if (tabSettings != null) {
-            tabSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        }
+            Intent intent = new Intent(this, target);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            startActivity(intent);
+            overridePendingTransition(0, 0);
+            return true;
+        });
     }
 }
-
