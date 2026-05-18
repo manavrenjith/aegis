@@ -154,7 +154,15 @@ public class FirewallService extends VpnService {
             throw new IllegalStateException("VPN establish failed");
         }
 
+        // Log rules before passing to native layer
+        java.util.List<FirewallRule> rules = FirewallRule.getRules(false, this);
+        Log.d(TAG, "start() - Loaded " + rules.size() + " firewall rules from getRules()");
+        for (FirewallRule rule : rules) {
+            Log.d(TAG, "  Rule: " + rule.packageName + " uid=" + rule.uid + " wifi_blocked=" + rule.wifi_blocked + " other_blocked=" + rule.other_blocked);
+        }
+
         // TODO: jni_start(jni_context, loglevel)
+        // TODO: Pass rules to native layer here - jni_add_rule() for each rule or jni_set_rules(array)
 
         if (tunnelThread != null && tunnelThread.isAlive()) {
             return;
@@ -188,6 +196,7 @@ public class FirewallService extends VpnService {
             }
         }
 
+        Log.d(TAG, "reload() - Reloading firewall rules");
         start();
     }
 
