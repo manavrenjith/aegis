@@ -4,8 +4,11 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.sqlite.SQLiteDatabase;
 import android.net.VpnService;
 import android.net.VpnService.Builder;
 import android.os.Build;
@@ -76,6 +79,7 @@ public class FirewallService extends VpnService {
     private native int jni_get_mtu();
 
     private native void jni_done(long context);
+
 
     private final class CommandHandler extends Handler {
 
@@ -154,21 +158,26 @@ public class FirewallService extends VpnService {
             throw new IllegalStateException("VPN establish failed");
         }
 
-        // Log rules before passing to native layer
-        java.util.List<FirewallRule> rules = FirewallRule.getRules(false, this);
-        Log.d(TAG, "start() - Loaded " + rules.size() + " firewall rules from getRules()");
-        for (FirewallRule rule : rules) {
-            Log.d(TAG, "  Rule: " + rule.packageName + " uid=" + rule.uid + " wifi_blocked=" + rule.wifi_blocked + " other_blocked=" + rule.other_blocked);
-        }
+        // Read default policy from SharedPreferences
+        // Default allow is the inverse of whitelist mode preference
+        SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
+        boolean whitelist_wifi = sp.getBoolean("whitelist_wifi", false);
+        boolean whitelist_other = sp.getBoolean("whitelist_other", false);
+        boolean whitelist_roaming = sp.getBoolean("whitelist_roaming", false);
+        boolean default_allow_wifi = !whitelist_wifi;
+        boolean default_allow_other = !whitelist_other;
+        boolean default_allow_roaming = !whitelist_roaming;
+        Log.d(TAG, "start() - Setting default policy: wifi=" + default_allow_wifi + " other=" + default_allow_other + " roaming=" + default_allow_roaming);
 
+        Log.d(TAG, "jni_start called with context=" + jni_context);
         // TODO: jni_start(jni_context, loglevel)
-        // TODO: Pass rules to native layer here - jni_add_rule() for each rule or jni_set_rules(array)
 
         if (tunnelThread != null && tunnelThread.isAlive()) {
             return;
         }
 
         tunnelThread = new Thread(() -> {
+            Log.d(TAG, "jni_run called");
             // TODO: jni_run(jni_context, vpn.getFd(), false, 3)
         }, "FirewallTunnel");
         tunnelThread.start();
@@ -416,5 +425,89 @@ public class FirewallService extends VpnService {
         );
         notificationManager.createNotificationChannel(foregroundChannel);
     }
-}
 
+    public boolean protect(int socket) {
+        return super.protect(socket);
+    }
+
+    public Allowed isAddressAllowed(Packet packet) {
+        Log.d(TAG, "isAddressAllowed called for uid=" + packet.uid);
+        if (packet == null) {
+            return null;
+        }
+
+        boolean isWifi = AegisUtils.isWifiActive(this);
+        FirewallRule matchedRule = null;
+        for (FirewallRule rule : FirewallRule.getRules(false, this)) {
+            if (rule.uid == packet.uid) {
+                matchedRule = rule;
+                break;
+            }
+        }
+
+        boolean blocked;
+        if (matchedRule != null) {
+            blocked = isWifi ? matchedRule.wifi_blocked : matchedRule.other_blocked;
+        } else {
+            SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
+            boolean whitelist_wifi = sp.getBoolean("whitelist_wifi", false);
+            boolean whitelist_other = sp.getBoolean("whitelist_other", false);
+            boolean whitelist = isWifi ? whitelist_wifi : whitelist_other;
+            blocked = whitelist;
+        }
+
+        packet.allowed = !blocked;
+        return blocked ? null : new Allowed();
+    }
+
+    public boolean isDomainBlocked(String name) {
+        return false;
+    }
+
+    public int getUidQ(int version, int protocol, String saddr, int sport, String daddr, int dport) {
+        return -1;
+    }
+
+    public void logPacket(Packet packet) {
+        if (packet == null) {
+            return;
+        }
+
+        AegisDatabase.getInstance(this)
+                .insertLog(packet, null, 0, AegisUtils.isInteractive(this));
+    }
+
+    public void dnsResolved(ResourceRecord rr) {
+        if (rr == null) {
+            return;
+        }
+
+        ContentValues cv = new ContentValues();
+        cv.put("time", rr.Time);
+        cv.put("qname", rr.QName);
+        cv.put("aname", rr.AName);
+        cv.put("resource", rr.Resource);
+        cv.put("ttl", rr.TTL);
+        cv.put("uid", rr.uid);
+
+        SQLiteDatabase db = AegisDatabase.getInstance(this).getWritableDatabase();
+        db.insertWithOnConflict("dns", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public void accountUsage(Usage usage) {
+        if (usage == null) {
+            return;
+        }
+
+        AegisDatabase.getInstance(this).updateUsage(usage, null);
+    }
+
+    public void nativeExit(String reason) {
+        Log.w(TAG, "nativeExit: " + reason);
+        stop(false);
+    }
+
+    public void nativeError(int error, String message) {
+        Log.e(TAG, "nativeError " + error + ": " + message);
+    }
+}
