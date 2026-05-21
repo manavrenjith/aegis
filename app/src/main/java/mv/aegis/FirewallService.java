@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
+import android.net.ConnectivityManager;
 import android.net.VpnService;
 import android.net.VpnService.Builder;
 import android.os.Build;
@@ -19,6 +20,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
+import java.net.InetSocketAddress;
 import java.util.List;
 
 import androidx.core.app.NotificationCompat;
@@ -477,7 +479,23 @@ public class FirewallService extends VpnService {
     }
 
     public int getUidQ(int version, int protocol, String saddr, int sport, String daddr, int dport) {
-        return -1;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return -1;
+        }
+
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm == null) {
+            return -1;
+        }
+
+        try {
+            InetSocketAddress local = new InetSocketAddress(saddr, sport);
+            InetSocketAddress remote = new InetSocketAddress(daddr, dport);
+            return cm.getConnectionOwnerUid(protocol, local, remote);
+        } catch (Exception exception) {
+            Log.w(TAG, "getUidQ failed for " + saddr + ":" + sport + " -> " + daddr + ":" + dport, exception);
+            return -1;
+        }
     }
 
     public void logPacket(Packet packet) {
