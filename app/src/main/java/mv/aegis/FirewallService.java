@@ -159,7 +159,7 @@ public class FirewallService extends VpnService {
         builder.setConfigureIntent(pendingIntent);
 
         Log.d(TAG, "jni_start called, context=" + jni_context);
-        // TODO: jni_start(jni_context, loglevel)
+        jni_start(jni_context, Log.WARN);
 
         if (tunFd != null && tunFd.getFileDescriptor().valid()) {
             try {
@@ -170,8 +170,14 @@ public class FirewallService extends VpnService {
             tunFd = null;
         }
 
+        Log.d(TAG, "builder config: " + builder.toString());
         Log.d(TAG, "VPN establish called");
         tunFd = builder.establish();
+        if (tunFd == null) {
+            Log.e(TAG, "establish() returned null — VPN builder config invalid");
+            return;
+        }
+        Log.d(TAG, "establish() succeeded, tun fd=" + tunFd.getFd());
         vpn = tunFd;
         if (tunFd == null) {
              throw new IllegalStateException("VPN establish failed");
@@ -200,7 +206,7 @@ public class FirewallService extends VpnService {
             }
             int tun = tunFd.getFd();
             Log.d(TAG, "jni_run called, tun=" + tun);
-            // TODO: jni_run(jni_context, tun, false, 3)
+            jni_run(jni_context, tun, false, 3);
         }, "FirewallTunnel");
         tunnelThread.start();
     }
@@ -213,7 +219,7 @@ public class FirewallService extends VpnService {
 
     private void stop(boolean temporary) {
         if (vpn != null) {
-            // TODO: jni_stop(jni_context)
+            jni_stop(jni_context);
             try {
                 vpn.close();
             } catch (Exception exception) {
