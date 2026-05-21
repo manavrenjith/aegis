@@ -19,6 +19,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
+import java.util.List;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -59,6 +60,8 @@ public class FirewallService extends VpnService {
 
     private State state = State.none;
     private ParcelFileDescriptor vpn = null;
+    private ParcelFileDescriptor tunFd = null;
+    private List<FirewallRule> currentRules = null;
     private boolean temporarilyStopped = false;
     private volatile Looper commandLooper;
     private volatile CommandHandler commandHandler;
@@ -108,30 +111,32 @@ public class FirewallService extends VpnService {
         }
 
         private void handleIntent(Intent intent) {
-            Command command = getCommand(intent);
-            if (command == null) {
-                return;
-            }
+            Log.d(TAG, "handleIntent command=" + getCommand(intent));
+             Command command = getCommand(intent);
+             if (command == null) {
+                 return;
+             }
 
-            switch (command) {
-                case start:
-                    start();
-                    break;
-                case reload:
-                    reload(intent.getBooleanExtra(EXTRA_INTERACTIVE, false));
-                    break;
-                case stop:
-                    temporarilyStopped = intent.getBooleanExtra(EXTRA_TEMPORARY, false);
-                    stop(temporarilyStopped);
-                    break;
-                case run:
-                default:
-                    break;
-            }
+             switch (command) {
+                 case start:
+                     start();
+                     break;
+                 case reload:
+                     reload(intent.getBooleanExtra(EXTRA_INTERACTIVE, false));
+                     break;
+                 case stop:
+                     temporarilyStopped = intent.getBooleanExtra(EXTRA_TEMPORARY, false);
+                     stop(temporarilyStopped);
+                     break;
+                 case run:
+                 default:
+                     break;
+             }
         }
     }
 
     private void start() {
+        Log.d(TAG, "start() BEGIN");
         if (vpn == null) {
             stopForeground(true);
             startForeground(NOTIFY_ENFORCING, getEnforcingNotification());
@@ -153,10 +158,24 @@ public class FirewallService extends VpnService {
         builder.setMtu(jni_get_mtu());
         builder.setConfigureIntent(pendingIntent);
 
-        vpn = builder.establish();
-        if (vpn == null) {
-            throw new IllegalStateException("VPN establish failed");
+        Log.d(TAG, "jni_start called, context=" + jni_context);
+        // TODO: jni_start(jni_context, loglevel)
+
+        if (tunFd != null && tunFd.getFileDescriptor().valid()) {
+            try {
+                tunFd.close();
+            } catch (Exception exception) {
+                Log.w(TAG, "Failed to close tunFd before establish", exception);
+            }
+            tunFd = null;
         }
+
+        Log.d(TAG, "VPN establish called");
+        tunFd = builder.establish();
+        vpn = tunFd;
+        if (tunFd == null) {
+             throw new IllegalStateException("VPN establish failed");
+         }
 
         // Read default policy from SharedPreferences
         // Default allow is the inverse of whitelist mode preference
@@ -169,44 +188,27 @@ public class FirewallService extends VpnService {
         boolean default_allow_roaming = !whitelist_roaming;
         Log.d(TAG, "start() - Setting default policy: wifi=" + default_allow_wifi + " other=" + default_allow_other + " roaming=" + default_allow_roaming);
 
-        Log.d(TAG, "jni_start called with context=" + jni_context);
-        // TODO: jni_start(jni_context, loglevel)
 
         if (tunnelThread != null && tunnelThread.isAlive()) {
             return;
         }
 
         tunnelThread = new Thread(() -> {
-            Log.d(TAG, "jni_run called");
-            // TODO: jni_run(jni_context, vpn.getFd(), false, 3)
+            if (tunFd == null || !tunFd.getFileDescriptor().valid()) {
+                Log.w(TAG, "jni_run skipped: tunFd is null or closed");
+                return;
+            }
+            int tun = tunFd.getFd();
+            Log.d(TAG, "jni_run called, tun=" + tun);
+            // TODO: jni_run(jni_context, tun, false, 3)
         }, "FirewallTunnel");
         tunnelThread.start();
     }
 
     private void reload(boolean interactive) {
-        if (state != State.enforcing) {
-            stopForeground(true);
-            startForeground(NOTIFY_ENFORCING, getEnforcingNotification());
-            state = State.enforcing;
-        }
+        currentRules = FirewallRule.getRules(false, this);
+        Log.d(TAG, "reload() - Reloaded firewall rules: " + (currentRules == null ? 0 : currentRules.size()));
 
-        if (vpn != null) {
-            try {
-                vpn.close();
-            } catch (Exception exception) {
-                Log.w(TAG, "Failed to close VPN on reload", exception);
-            }
-            vpn = null;
-
-            try {
-                Thread.sleep(500L);
-            } catch (InterruptedException interruptedException) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        Log.d(TAG, "reload() - Reloading firewall rules");
-        start();
     }
 
     private void stop(boolean temporary) {
@@ -272,6 +274,7 @@ public class FirewallService extends VpnService {
         startForeground(NOTIFY_WAITING, getWaitingNotification());
 
         synchronized (jni_lock) {
+            Log.d(TAG, "jni_init called");
             jni_context = jni_init(Build.VERSION.SDK_INT);
         }
 
@@ -438,10 +441,13 @@ public class FirewallService extends VpnService {
 
         boolean isWifi = AegisUtils.isWifiActive(this);
         FirewallRule matchedRule = null;
-        for (FirewallRule rule : FirewallRule.getRules(false, this)) {
-            if (rule.uid == packet.uid) {
-                matchedRule = rule;
-                break;
+        List<FirewallRule> rules = currentRules;
+        if (rules != null) {
+            for (FirewallRule rule : rules) {
+                if (rule.uid == packet.uid) {
+                    matchedRule = rule;
+                    break;
+                }
             }
         }
 
