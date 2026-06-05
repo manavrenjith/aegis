@@ -159,7 +159,12 @@ public class FirewallService extends VpnService {
         builder.addRoute("0.0.0.0", 0);
         builder.setMtu(jni_get_mtu());
         builder.setConfigureIntent(pendingIntent);
-
+        // Exclude Aegis itself so its traffic bypasses the VPN tunnel
+        try {
+            builder.addDisallowedApplication(getPackageName());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to exclude self from VPN", e);
+        }
         Log.d(TAG, "jni_start called, context=" + jni_context);
         jni_start(jni_context, Log.WARN);
 
@@ -438,7 +443,9 @@ public class FirewallService extends VpnService {
     }
 
     public boolean protect(int socket) {
-        return super.protect(socket);
+        boolean result = super.protect(socket);
+        Log.d(TAG, "protect socket=" + socket + " result=" + result);
+        return result;
     }
 
     public Allowed isAddressAllowed(Packet packet) {
