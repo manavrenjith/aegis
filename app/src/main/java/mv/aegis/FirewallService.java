@@ -139,6 +139,7 @@ public class FirewallService extends VpnService {
 
     private void start() {
         Log.d(TAG, "start() BEGIN");
+        currentRules = FirewallRule.getRules(false, this);  // ← add this
         if (vpn == null) {
             stopForeground(true);
             startForeground(NOTIFY_ENFORCING, getEnforcingNotification());
@@ -166,7 +167,7 @@ public class FirewallService extends VpnService {
             Log.e(TAG, "Failed to exclude self from VPN", e);
         }
         Log.d(TAG, "jni_start called, context=" + jni_context);
-        jni_start(jni_context, Log.WARN);
+        jni_start(jni_context, Log.DEBUG);  // Log.DEBUG = 3 — enables packet logging
 
         if (tunFd != null && tunFd.getFileDescriptor().valid()) {
             try {
@@ -506,10 +507,8 @@ public class FirewallService extends VpnService {
     }
 
     public void logPacket(Packet packet) {
-        if (packet == null) {
-            return;
-        }
-
+        if (packet == null) return;
+        Log.d(TAG, "logPacket uid=" + packet.uid + " daddr=" + packet.daddr);
         AegisDatabase.getInstance(this)
                 .insertLog(packet, null, 0, AegisUtils.isInteractive(this));
     }

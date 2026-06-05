@@ -316,6 +316,7 @@ void handle_ip(const struct arguments *args,
     }
 
     // Handle allowed traffic
+    // Handle allowed traffic
     if (allowed) {
         if (protocol == IPPROTO_ICMP || protocol == IPPROTO_ICMPV6)
             handle_icmp(args, pkt, length, payload, uid, epoll_fd);
@@ -323,6 +324,10 @@ void handle_ip(const struct arguments *args,
             handle_udp(args, pkt, length, payload, uid, redirect, epoll_fd);
         else if (protocol == IPPROTO_TCP)
             handle_tcp(args, pkt, length, payload, uid, allowed, redirect, epoll_fd);
+
+        jobject logPacket = create_packet(
+                args, version, protocol, flags, source, sport, dest, dport, data, uid, 1);
+        log_packet(args, logPacket);
     } else {
         if (protocol == IPPROTO_UDP)
             block_udp(args, pkt, length, payload, uid);
@@ -331,6 +336,10 @@ void handle_ip(const struct arguments *args,
 
         log_android(ANDROID_LOG_WARN, "Address v%d p%d %s/%u syn %d not allowed",
                     version, protocol, dest, dport, syn);
+
+        jobject logPacket = create_packet(
+                args, version, protocol, flags, source, sport, dest, dport, data, uid, 0);
+        log_packet(args, logPacket);
     }
 }
 
