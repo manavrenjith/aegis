@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.drawable.Drawable;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -53,7 +54,12 @@ public class AdapterActivity extends CursorAdapter {
             tvName.setText(names.get(0));
         }
 
-        String[] pkgs = pm.getPackagesForUid(uid);
+        String[] pkgs = null;
+        try {
+            pkgs = pm.getPackagesForUid(uid);
+        } catch (SecurityException e) {
+            Log.w("AdapterActivity", "Cannot get packages for uid=" + uid);
+        }
         String pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
         tvPackage.setText(pkg != null ? pkg : "uid:" + uid);
 
