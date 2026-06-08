@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.svg" width="160" alt="AEGIS Logo" />
+<img src="assets/aegis_logo.svg" width="160" alt="AEGIS Logo" />
 
 # AEGIS
 
