@@ -4,7 +4,7 @@
 
 # AEGIS
 
-**A lightweight, privacy-focused firewall for Android — no root required.**
+**A lightweight, privacy-focused firewall for Android  no root required.**
 
 [![Android](https://img.shields.io/badge/Android-5.0%2B-3DDC84?logo=android&logoColor=white)](https://android.com)
 [![Java](https://img.shields.io/badge/Language-Java-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org)
@@ -61,16 +61,16 @@ Current development focuses on performance, reliability, enhanced filtering and 
 ## Features
 
 ### 🔒 Per-app Firewall Rules
-Block or allow network access individually for every installed app — system apps included. Rules persist across reboots and VPN restarts.
+Block or allow network access individually for every installed app system apps included. Rules persist across reboots and VPN restarts.
 
 ### 📋 Live Activity Log
-Every packet flowing through the tunnel is captured and displayed in real time — destination domain or IP, app name, port, direction, timestamp, and allow/block status.
+Every packet flowing through the tunnel is captured and displayed in real time  destination domain or IP, app name, port, direction, timestamp, and allow/block status.
 
 ### 📊 Network Usage Tracking
 Monitor how much data each app sends and receives over time. Per-app usage is tracked by the native packet engine and stored locally in SQLite.
 
 ### 🔍 App Detail View
-Tap any app to inspect its full connection history — every destination it has contacted, the protocol used, and the bytes exchanged.
+Tap any app to inspect its full connection history  every destination it has contacted, the protocol used, and the bytes exchanged.
 
 ### ⚙️ Simple Settings
 Configure default block policy (whitelist or blacklist mode), toggle logging, and adjust behavior for Wi-Fi vs mobile data independently.
@@ -91,7 +91,7 @@ App traffic
 Android VPN tunnel (tun interface)
     │
     ▼
-libaegiscore (JNI) — packet parsing, uid resolution, session tracking
+libaegiscore (JNI)  packet parsing, uid resolution, session tracking
     │
     ├─ isAddressAllowed() ──► FirewallRule lookup ──► allow / block
     ├─ logPacket()        ──► AegisDatabase (SQLite)
@@ -141,13 +141,13 @@ The NDK and CMake versions are pinned in `app/build.gradle`. Android Studio will
 
 ```
 mv.aegis/
-├── FirewallService.java     # VpnService — tunnel lifecycle, JNI bridge
-├── HomeActivity.java        # Main screen — VPN toggle, app list
+├── FirewallService.java     # VpnService  tunnel lifecycle, JNI bridge
+├── HomeActivity.java        # Main screen VPN toggle, app list
 ├── AppListActivity.java     # All installed apps + rule toggles
 ├── AppDetailActivity.java   # Per-app connection history
 ├── LogActivity.java         # Live packet log
 ├── SettingsActivity.java    # Preferences
-├── AegisDatabase.java       # SQLite — log, access, dns, app tables
+├── AegisDatabase.java       # SQLite  log, access, dns, app tables
 ├── FirewallRule.java        # Rule model + loader
 ├── AegisUtils.java          # Utility methods + JNI helpers
 ├── Packet.java              # Packet model (JNI ↔ Java)
@@ -194,7 +194,7 @@ designs and architecture concepts.
 ## License
 
 ```
-AEGIS — Android Firewall
+AEGIS  Android Firewall
 Copyright (C) 2026 Manav Renjith
 
 This program is free software: you can redistribute it and/or modify
