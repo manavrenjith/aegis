@@ -52,8 +52,8 @@ Current development focuses on performance, reliability, enhanced filtering and 
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/log.jpgg" width="48%" />
-  <img src="docs/screenshots/settings.png" width="48%" />
+  <img src="docs/screenshots/log.jpg" width="48%" />
+  <img src="docs/screenshots/settings.jpeg" width="48%" />
 </p>
 
 ---
