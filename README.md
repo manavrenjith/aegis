@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/aegis_logo.svg" width="160" alt="AEGIS Logo" />
+<img src="docs/aegis_logo.svg" width="160" alt="AEGIS Logo" />
 
 # AEGIS
 
@@ -44,10 +44,17 @@ Current development focuses on performance, reliability, enhanced filtering and 
 - [ ] Additional filtering capabilities
 
 
----
 ## Screenshots
 
-> *(coming soon)*
+<p align="center">
+  <img src="docs/screenshots/home.jpeg" width="48%" />
+  <img src="docs/screenshots/activity.jpeg" width="48%" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/log.jpgg" width="48%" />
+  <img src="docs/screenshots/settings.png" width="48%" />
+</p>
 
 ---
 
