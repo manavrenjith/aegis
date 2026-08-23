@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -37,6 +38,12 @@
             android:name="mv.aegis.AppDetailActivity" />
         <activity
             android:name="mv.aegis.SettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name="mv.aegis.BlocklistActivity"
+            android:exported="false" />
+        <activity
+            android:name="mv.aegis.SpywareScanActivity"
             android:exported="false" />
 
         <service

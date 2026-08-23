@@ -36,6 +36,7 @@ Current development focuses on performance, reliability, enhanced filtering and 
 - [x] SQLite persistence
 - [x] Material 3 UI
 - [x] JNI integration with native packet engine
+- [x] On-device spyware and stalkerware detection & response
 
 ### In Progress
 - [ ] Performance optimization
@@ -71,6 +72,9 @@ Monitor how much data each app sends and receives over time. Per-app usage is tr
 
 ### 🔍 App Detail View
 Tap any app to inspect its full connection history  every destination it has contacted, the protocol used, and the bytes exchanged.
+
+### 🕵️ Spyware & Stalkerware Detection
+On-device scanner combining known signature matching with behavioral heuristics (hidden launcher icons, active device admin privileges, accessibility services, sideloaded install sources). Features instant per-app firewall network blocking and assisted uninstaller handoff.
 
 ### ⚙️ Simple Settings
 Configure default block policy (whitelist or blacklist mode), toggle logging, and adjust behavior for Wi-Fi vs mobile data independently.

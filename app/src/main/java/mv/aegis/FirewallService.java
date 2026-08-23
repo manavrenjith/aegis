@@ -22,6 +22,7 @@ import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -38,6 +39,7 @@ public class FirewallService extends VpnService {
         run,
         start,
         reload,
+        reload_blocklist,
         stop
     }
 
@@ -50,9 +52,12 @@ public class FirewallService extends VpnService {
     private static final int NOTIFY_WAITING = 2;
     private static final int NOTIFY_DISABLED = 3;
     private static final int NOTIFY_ERROR = 6;
+    // Threat alerts use IDs well above the fixed foreground IDs (1/2/3/6) to avoid collisions.
+    private static final int NOTIFY_THREAT_BASE = 1000;
 
     private static final String TAG = "FirewallService";
     private static final String CHANNEL_ID_FOREGROUND = "foreground";
+    private static final String CHANNEL_ID_THREATS = "threats";
 
     private enum State {
         none,
@@ -70,6 +75,8 @@ public class FirewallService extends VpnService {
     private static Object jni_lock = new Object();
     private static long jni_context = 0;
     private Thread tunnelThread = null;
+    private ThreatDetector threatDetector;
+    private final ConcurrentHashMap<String, Integer> recentDomainUid = new ConcurrentHashMap<>();
 
     private native long jni_init(int sdk);
 
@@ -125,6 +132,11 @@ public class FirewallService extends VpnService {
                      break;
                  case reload:
                      reload(intent.getBooleanExtra(EXTRA_INTERACTIVE, false));
+                     break;
+                 case reload_blocklist:
+                     if (threatDetector != null) {
+                         threatDetector.reload();
+                     }
                      break;
                  case stop:
                      temporarilyStopped = intent.getBooleanExtra(EXTRA_TEMPORARY, false);
@@ -283,6 +295,7 @@ public class FirewallService extends VpnService {
     public void onCreate() {
         super.onCreate();
         ensureForegroundChannel();
+        ensureThreatChannel();
 
         state = State.waiting;
         startForeground(NOTIFY_WAITING, getWaitingNotification());
@@ -296,6 +309,15 @@ public class FirewallService extends VpnService {
         handlerThread.start();
         commandLooper = handlerThread.getLooper();
         commandHandler = new CommandHandler(commandLooper);
+
+        threatDetector = new ThreatDetector(this);
+        new Thread(() -> {
+            try {
+                threatDetector.load();
+            } catch (Throwable t) {
+                Log.e(TAG, "ThreatDetector load failed", t);
+            }
+        }, "AegisThreatLoad").start();
     }
 
     @Override
@@ -373,6 +395,16 @@ public class FirewallService extends VpnService {
         startForegroundServiceCompat(context, intent);
     }
 
+    /**
+     * Tells a RUNNING service to refresh its in-memory blocklist from the database after the
+     * user edits it in the in-app manager. Callers should only invoke this while the firewall
+     * is enabled; when it is off the service is stopped and reloads on its next start.
+     */
+    public static void reloadBlocklist(String reason, Context context) {
+        Intent intent = createIntent(context, Command.reload_blocklist, reason);
+        startForegroundServiceCompat(context, intent);
+    }
+
     public static void run(String reason, Context context) {
         Intent intent = createIntent(context, Command.run, reason);
         startForegroundServiceCompat(context, intent);
@@ -443,6 +475,88 @@ public class FirewallService extends VpnService {
         notificationManager.createNotificationChannel(foregroundChannel);
     }
 
+    private void ensureThreatChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        if (notificationManager == null) {
+            return;
+        }
+
+        if (notificationManager.getNotificationChannel(CHANNEL_ID_THREATS) != null) {
+            return;
+        }
+
+        NotificationChannel threatChannel = new NotificationChannel(
+                CHANNEL_ID_THREATS,
+                "Threat alerts",
+                NotificationManager.IMPORTANCE_HIGH
+        );
+        threatChannel.setDescription(
+                "Alerts when Aegis blocks a malicious domain or flags a lookalike domain.");
+        notificationManager.createNotificationChannel(threatChannel);
+    }
+
+    /**
+     * Posts a heads-up notification describing a detected threat and why. Blocklist hits
+     * are reported as blocked; typosquat hits are reported as flagged (not blocked).
+     * No-op if the user hasn't granted notification permission (API 33+).
+     */
+    private void fireThreatNotification(String domain, String threatType,
+                                        boolean blocked, String detail) {
+        try {
+            if (!AegisUtils.canNotify(this)) {
+                return;
+            }
+
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            if (notificationManager == null) {
+                return;
+            }
+
+            Intent intent = new Intent().setClassName(this, "mv.aegis.HomeActivity");
+            PendingIntent pendingIntent = PendingIntent.getActivity(
+                    this,
+                    0,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+
+            String title = blocked ? "Threat blocked" : "Suspicious domain flagged";
+
+            StringBuilder summary = new StringBuilder();
+            summary.append(domain).append(" — ").append(threatType);
+            if (detail != null && !detail.isEmpty()) {
+                summary.append(" (").append(detail).append(")");
+            }
+
+            String why = blocked
+                    ? "Aegis blocked a connection to a known malicious domain."
+                    : "Aegis flagged a domain that looks like a trusted brand. It was not "
+                            + "blocked automatically — open Aegis to review.";
+
+            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID_THREATS)
+                    .setSmallIcon(R.drawable.ic_security_white_24dp)
+                    .setContentTitle(title)
+                    .setContentText(summary.toString())
+                    .setStyle(new NotificationCompat.BigTextStyle()
+                            .bigText(summary + "\n\n" + why))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_STATUS)
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent)
+                    .build();
+
+            String key = ThreatDetector.normalize(domain);
+            int id = NOTIFY_THREAT_BASE + Math.abs((key == null ? domain : key).hashCode() % 100000);
+            notificationManager.notify(id, notification);
+        } catch (Throwable t) {
+            Log.e(TAG, "fireThreatNotification failed for " + domain, t);
+        }
+    }
+
     public boolean protect(int socket) {
         boolean result = super.protect(socket);
         Log.d(TAG, "protect socket=" + socket + " result=" + result);
@@ -483,7 +597,65 @@ public class FirewallService extends VpnService {
     }
 
     public boolean isDomainBlocked(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        try {
+            if (threatDetector != null) {
+                if (threatDetector.isBlocklisted(name)) {
+                    onThreatDetected(name, ThreatDetector.THREAT_BLOCKLIST, true, null);
+                    return true; // known-bad -> auto-block
+                }
+                String impersonated = threatDetector.typosquatTarget(name);
+                if (impersonated != null) {
+                    // Lookalike domain: flag only, do NOT block.
+                    onThreatDetected(name, ThreatDetector.THREAT_TYPOSQUAT, false,
+                            "lookalike of " + impersonated);
+                }
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "isDomainBlocked check failed for " + name, t);
+        }
         return false;
+    }
+
+    private void onThreatDetected(String domain, String threatType, boolean blocked, String detail) {
+        try {
+            if (threatDetector == null || !threatDetector.shouldReport(threatType, domain)) {
+                return;
+            }
+            Log.w(TAG, "Threat detected (" + threatType + "): " + domain + " blocked=" + blocked
+                    + (detail == null ? "" : " [" + detail + "]"));
+
+            Packet packet = new Packet();
+            packet.time = System.currentTimeMillis();
+            packet.version = 4;
+            packet.protocol = 17; // mark as UDP so the row is visible in the standard log viewer
+            packet.flags = "";
+            packet.saddr = "";
+            packet.sport = 0;
+            packet.daddr = "";
+            packet.dport = 0;
+            packet.data = detail == null ? "" : detail;
+            packet.uid = recentUidForDomain(domain);
+            packet.allowed = !blocked;
+
+            AegisDatabase.getInstance(this)
+                    .insertThreatLog(packet, domain, threatType, 0, AegisUtils.isInteractive(this));
+
+            fireThreatNotification(domain, threatType, blocked, detail);
+        } catch (Throwable t) {
+            Log.e(TAG, "onThreatDetected failed for " + domain, t);
+        }
+    }
+
+    private int recentUidForDomain(String domain) {
+        String key = ThreatDetector.normalize(domain);
+        if (key == null) {
+            return -1;
+        }
+        Integer uid = recentDomainUid.get(key);
+        return uid == null ? -1 : uid;
     }
 
     public int getUidQ(int version, int protocol, String saddr, int sport, String daddr, int dport) {
@@ -528,6 +700,18 @@ public class FirewallService extends VpnService {
 
         SQLiteDatabase db = AegisDatabase.getInstance(this).getWritableDatabase();
         db.insertWithOnConflict("dns", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+
+        // Best-effort domain -> uid attribution for threat logging (Feature 1/4).
+        // uid is real in the TLS SNI path (ip.c) and -1 in the DNS-answer path (dns.c).
+        if (rr.uid >= 0 && rr.QName != null) {
+            String key = ThreatDetector.normalize(rr.QName);
+            if (key != null && !key.isEmpty()) {
+                if (recentDomainUid.size() > 5000) {
+                    recentDomainUid.clear();
+                }
+                recentDomainUid.put(key, rr.uid);
+            }
+        }
     }
 
     public void accountUsage(Usage usage) {

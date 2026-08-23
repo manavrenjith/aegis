@@ -17,13 +17,15 @@ import androidx.preference.PreferenceManager;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AegisDatabase extends SQLiteOpenHelper {
     private static final String TAG = "Aegis.Database";
     private static final String DB_NAME = "Aegis";
-    private static final int DB_VERSION = 22;
+    private static final int DB_VERSION = 23;
     private static final int MSG_LOG = 1;
     private static final int MSG_ACCESS = 2;
     private static final long SYN_SNI_DELAY = 5000L;
@@ -72,6 +74,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         createTableAccess(db);
         createTableDns(db);
         createTableApp(db);
+        createTableBlocklist(db);
     }
 
     private void createTableLog(SQLiteDatabase db) {
@@ -90,7 +93,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 + "data TEXT,"
                 + "allowed INTEGER,"
                 + "connection INTEGER,"
-                + "interactive INTEGER"
+                + "interactive INTEGER,"
+                + "threat_type TEXT"
                 + ")");
 
         db.execSQL("CREATE INDEX idx_log_time ON log(time)");
@@ -147,6 +151,17 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 + ")");
 
         db.execSQL("CREATE UNIQUE INDEX idx_package ON app(package)");
+    }
+
+    private void createTableBlocklist(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE blocklist ("
+                + "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
+                + "domain TEXT NOT NULL,"
+                + "source TEXT,"
+                + "time INTEGER"
+                + ")");
+
+        db.execSQL("CREATE UNIQUE INDEX idx_blocklist_domain ON blocklist(domain)");
     }
 
     @Override
@@ -280,6 +295,15 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 oldVersion = 22;
             }
 
+            if (oldVersion < 23) {
+                if (!columnExists(db, "log", "threat_type")) {
+                    db.execSQL("ALTER TABLE log ADD COLUMN threat_type TEXT");
+                }
+                db.execSQL("DROP TABLE IF EXISTS blocklist");
+                createTableBlocklist(db);
+                oldVersion = 23;
+            }
+
             if (oldVersion == DB_VERSION) {
                 db.setTransactionSuccessful();
             } else {
@@ -350,6 +374,227 @@ public class AegisDatabase extends SQLiteOpenHelper {
             notifyLogChanged();
         } finally {
             lock.writeLock().unlock();
+        }
+    }
+
+    public void insertThreatLog(Packet packet, String dname, String threatType, int connection, boolean interactive) {
+        lock.writeLock().lock();
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+
+            ContentValues cv = new ContentValues();
+            cv.put("time", packet.time);
+            cv.put("version", packet.version >= 0 ? packet.version : null);
+            cv.put("protocol", packet.protocol >= 0 ? packet.protocol : null);
+            cv.put("flags", packet.flags);
+            cv.put("saddr", packet.saddr);
+            cv.put("sport", packet.sport >= 0 ? packet.sport : null);
+            cv.put("daddr", packet.daddr);
+            cv.put("dport", packet.dport >= 0 ? packet.dport : null);
+            cv.put("dname", dname);
+            cv.put("data", packet.data);
+            cv.put("uid", packet.uid >= 0 ? packet.uid : null);
+            cv.put("allowed", packet.allowed ? 1 : 0);
+            cv.put("connection", connection);
+            cv.put("interactive", interactive ? 1 : 0);
+            cv.put("threat_type", threatType);
+
+            long id = db.insert("log", null, cv);
+            if (id < 0) {
+                Log.e(TAG, "insert threat log failed");
+            }
+
+            notifyLogChanged();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public long getBlocklistCount() {
+        lock.readLock().lock();
+        Cursor cursor = null;
+        try {
+            cursor = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM blocklist", null);
+            if (cursor.moveToFirst()) {
+                return cursor.getLong(0);
+            }
+            return 0L;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            lock.readLock().unlock();
+        }
+    }
+
+    public int insertBlocklistDomains(List<String> domains, String source) {
+        if (domains == null || domains.isEmpty()) {
+            return 0;
+        }
+        lock.writeLock().lock();
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            long now = System.currentTimeMillis();
+            int inserted = 0;
+            db.beginTransaction();
+            try {
+                for (String domain : domains) {
+                    if (domain == null || domain.isEmpty()) {
+                        continue;
+                    }
+                    ContentValues cv = new ContentValues();
+                    cv.put("domain", domain);
+                    cv.put("source", source);
+                    cv.put("time", now);
+                    long id = db.insertWithOnConflict("blocklist", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (id >= 0) {
+                        inserted++;
+                    }
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+            return inserted;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public Set<String> loadBlocklistDomains() {
+        lock.readLock().lock();
+        Cursor cursor = null;
+        try {
+            Set<String> domains = new HashSet<>();
+            cursor = getReadableDatabase().rawQuery("SELECT domain FROM blocklist", null);
+            while (cursor.moveToNext()) {
+                String domain = cursor.getString(0);
+                if (domain != null && !domain.isEmpty()) {
+                    domains.add(domain);
+                }
+            }
+            return domains;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            lock.readLock().unlock();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // User-managed blocklist (in-app "Manage blocklist" screen)
+    // ------------------------------------------------------------------
+
+    /**
+     * Adds a single domain to the blocklist. The unique index on {@code domain} makes this a
+     * no-op for duplicates. Returns true only if a new row was actually inserted.
+     *
+     * @param source provenance tag, e.g. "user" for user-added, "bundled" for the seed list.
+     */
+    public boolean addBlocklistDomain(String domain, String source) {
+        if (domain == null || domain.isEmpty()) {
+            return false;
+        }
+        lock.writeLock().lock();
+        try {
+            ContentValues cv = new ContentValues();
+            cv.put("domain", domain);
+            cv.put("source", source);
+            cv.put("time", System.currentTimeMillis());
+            long id = getWritableDatabase()
+                    .insertWithOnConflict("blocklist", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+            return id >= 0;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    /** Removes a domain from the blocklist. Returns the number of rows deleted (0 or 1). */
+    public int deleteBlocklistDomain(String domain) {
+        if (domain == null || domain.isEmpty()) {
+            return 0;
+        }
+        lock.writeLock().lock();
+        try {
+            return getWritableDatabase().delete("blocklist", "domain = ?", new String[]{domain});
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * All blocklist entries for the manager UI. User-added domains are listed first, then the
+     * bundled samples; both groups are alphabetical. Each entry is {domain, source} and
+     * {@code source} may be null for legacy rows.
+     */
+    public List<String[]> listBlocklist() {
+        lock.readLock().lock();
+        Cursor cursor = null;
+        try {
+            List<String[]> out = new ArrayList<>();
+            cursor = getReadableDatabase().rawQuery(
+                    "SELECT domain, source FROM blocklist ORDER BY "
+                            + "CASE WHEN source = 'user' THEN 0 ELSE 1 END, domain ASC", null);
+            while (cursor.moveToNext()) {
+                out.add(new String[]{cursor.getString(0), cursor.getString(1)});
+            }
+            return out;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Number of log rows recorded as auto-blocked threats (e.g. known-phishing / blocklist
+     * hits). Typosquat detections are flagged rather than blocked, so they are not counted.
+     */
+    public int getThreatBlockedCount() {
+        lock.readLock().lock();
+        Cursor cursor = null;
+        try {
+            cursor = getReadableDatabase().rawQuery(
+                    "SELECT COUNT(*) FROM log WHERE threat_type IS NOT NULL AND allowed = 0", null);
+            if (cursor.moveToFirst()) {
+                return cursor.getInt(0);
+            }
+            return 0;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Up to {@code limit} apps with the most threat detections (blocked or flagged), most
+     * first. Each entry is {uid, count}; a uid of -1 means the detection could not be
+     * attributed to an app (e.g. it was captured on the DNS response path).
+     */
+    public List<int[]> getTopThreatApps(int limit) {
+        lock.readLock().lock();
+        Cursor cursor = null;
+        try {
+            List<int[]> out = new ArrayList<>();
+            cursor = getReadableDatabase().rawQuery(
+                    "SELECT uid, COUNT(*) AS c FROM log WHERE threat_type IS NOT NULL "
+                            + "GROUP BY uid ORDER BY c DESC LIMIT ?",
+                    new String[]{String.valueOf(limit)});
+            while (cursor.moveToNext()) {
+                int uid = cursor.isNull(0) ? -1 : cursor.getInt(0);
+                int count = cursor.getInt(1);
+                out.add(new int[]{uid, count});
+            }
+            return out;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            lock.readLock().unlock();
         }
     }
 

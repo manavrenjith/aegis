@@ -1,21 +1,26 @@
 package mv.aegis;
 
+import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.net.VpnService;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -43,6 +48,7 @@ public class HomeActivity extends BaseActivity {
     public static final String EXTRA_METERED = "Metered";
     public static final String EXTRA_SIZE = "Size";
     private static final int REQUEST_VPN = 1;
+    private static final int REQUEST_NOTIFICATIONS = 2;
 
     private boolean running = false;
     private SwipeRefreshLayout swipeRefresh = null;
@@ -147,6 +153,34 @@ public class HomeActivity extends BaseActivity {
         });
 
         updateApplicationList(null);
+
+        View cardSpyware = findViewById(R.id.cardSpyware);
+        if (cardSpyware != null) {
+            cardSpyware.setOnClickListener(v ->
+                    startActivity(new Intent(this, SpywareScanActivity.class)));
+        }
+
+        maybeRequestNotificationPermission();
+    }
+
+    /**
+     * On Android 13+ (API 33), POST_NOTIFICATIONS is a runtime permission. Threat alerts
+     * (Feature 3) are silently dropped without it, so ask once on launch. Older versions
+     * grant notifications at install time and need no prompt.
+     */
+    private void maybeRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) {
+            return;
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        ActivityCompat.requestPermissions(
+                this,
+                new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                REQUEST_NOTIFICATIONS
+        );
     }
 
     private void setActiveChip(Chip active, Chip... inactive) {
@@ -205,6 +239,7 @@ public class HomeActivity extends BaseActivity {
                     swipeRefresh.setRefreshing(false);
                 }
                 updateStatCards();
+                updateThreatCard();
             });
         });
     }
@@ -229,6 +264,69 @@ public class HomeActivity extends BaseActivity {
 
         TextView tvDataToday = findViewById(R.id.tvDataToday);
         tvDataToday.setText("0 B"); // TODO: wire AegisDatabase.getTodayUsage()
+    }
+
+    /**
+     * Populates the Feature 4 threat summary card: the total count of auto-blocked
+     * threats and the top 3 apps by threat detections. DB access runs off the main
+     * thread; the UI is updated back on the main thread.
+     */
+    private void updateThreatCard() {
+        executor.execute(() -> {
+            int blocked = 0;
+            List<int[]> topApps = Collections.emptyList();
+            try {
+                AegisDatabase db = AegisDatabase.getInstance(this);
+                blocked = db.getThreatBlockedCount();
+                topApps = db.getTopThreatApps(3);
+            } catch (Throwable throwable) {
+                Log.e("HomeActivity", "Failed to load threat stats", throwable);
+            }
+
+            final int finalBlocked = blocked;
+            final List<int[]> finalTopApps = topApps;
+            handler.post(() -> {
+                TextView tvThreatsBlocked = findViewById(R.id.tvThreatsBlocked);
+                if (tvThreatsBlocked != null) {
+                    tvThreatsBlocked.setText(String.valueOf(finalBlocked));
+                }
+
+                TextView tvThreatApps = findViewById(R.id.tvThreatApps);
+                if (tvThreatApps != null) {
+                    if (finalTopApps.isEmpty()) {
+                        tvThreatApps.setText("No threats detected yet");
+                    } else {
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < finalTopApps.size(); i++) {
+                            int uid = finalTopApps.get(i)[0];
+                            int count = finalTopApps.get(i)[1];
+                            if (i > 0) {
+                                sb.append('\n');
+                            }
+                            sb.append("• ").append(appLabelForUid(uid))
+                                    .append(" — ").append(count);
+                        }
+                        tvThreatApps.setText(sb.toString());
+                    }
+                }
+            });
+        });
+    }
+
+    /** Best-effort human label for a uid recorded against a threat row. */
+    private String appLabelForUid(int uid) {
+        if (uid < 0) {
+            return "Unattributed";
+        }
+        try {
+            List<String> names = AegisUtils.getApplicationNames(uid, this);
+            if (names != null && !names.isEmpty()) {
+                return names.get(0);
+            }
+        } catch (Throwable ignored) {
+            // Fall through to the uid label.
+        }
+        return "UID " + uid;
     }
 
     private void updateHeroCard(boolean enabled) {
@@ -284,6 +382,7 @@ public class HomeActivity extends BaseActivity {
         LocalBroadcastManager.getInstance(this)
                 .registerReceiver(onRulesChanged, new IntentFilter(ACTION_RULES_CHANGED));
         updateStatCards();
+        updateThreatCard();
     }
 
     @Override

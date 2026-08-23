@@ -1,0 +1,16 @@
+# Aegis spyware / stalkerware signature list
+# ---------------------------------------------------------------------------
+# One Android application ID (package name) per line.
+# Lines starting with '#' and blank lines are ignored. Matching is exact and
+# case-insensitive. Any installed app whose package matches an entry here is
+# flagged as "KNOWN" (highest severity) by the spyware scanner, regardless of
+# its permissions.
+#
+# This is an EDITABLE starter list. Populate it from a stalkerware threat feed
+# (e.g. the Coalition Against Stalkerware indicators, or your own intel).
+#
+# The two entries below are NON-FUNCTIONAL PLACEHOLDERS (safe examples) so the
+# file parses and nothing real is falsely accused. Replace them with real
+# application IDs, or add your own for testing.
+com.example.stalkerware.sample
+net.example.trackerware.demo
