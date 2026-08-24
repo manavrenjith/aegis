@@ -129,5 +129,10 @@
 			app:title="@string/setting_reset_usage" />
 	</PreferenceScreen>
 
+	<Preference
+		app:key="manage_blocklist"
+		app:title="@string/setting_manage_blocklist"
+		app:summary="@string/summary_manage_blocklist" />
+
 </PreferenceScreen>
 

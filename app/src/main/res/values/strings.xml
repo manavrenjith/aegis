@@ -34,6 +34,8 @@
     <string name="setting_track_usage">Track network usage</string>
     <string name="setting_reset_usage">Reset network usage</string>
     <string name="setting_block_domains">Block domain names</string>
+    <string name="setting_manage_blocklist">Manage blocklist</string>
+    <string name="summary_manage_blocklist">View and edit domain blocklist entries</string>
 
     <string name="summary_install">Show a notification to quickly configure newly installed apps</string>
     <string name="summary_auto">Automatically re-enable Aegis after a set number of minutes when disabled via widget (set to zero to turn off)</string>

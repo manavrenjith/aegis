@@ -1,0 +1,39 @@
+# Aegis bundled malicious-domain blocklist (sample data for the hackathon build)
+#
+# Format: one domain per line. Lines beginning with '#' and blank lines are ignored.
+# Matching is EXACT domain only, case-insensitive (a trailing dot is stripped).
+#   e.g. "sbi-onlin-login.com" matches sbi-onlin-login.com but NOT www.sbi-onlin-login.com
+# On first app run these are loaded into the SQLite 'blocklist' table, then held
+# in memory and checked on every DNS lookup / TLS SNI. Matches are auto-blocked
+# (DNS response is sinkholed to NXDOMAIN) and logged with threat_type
+# "known phishing domain".
+#
+# NOTE: these are illustrative sample domains for the demo, not a live feed.
+
+# --- India / UPI / banking phishing-style samples ---
+secure-paytm-kyc-update.com
+sbi-onlin-login.com
+verify-hdfc-netbanking.com
+free-paytm-cashback.xyz
+upi-refund-verify.in
+icici-bank-secure-alert.com
+phonepe-reward-claim.xyz
+axis-bank-kyc-verify.in
+your-parcel-customs-fee.in
+kbc-lottery-winner-2026.com
+army-canteen-csd-offer.in
+
+# --- Global brand-impersonation phishing-style samples ---
+amazon-in-prize-winner.com
+whatsapp-gold-download.net
+netflix-billing-update-secure.com
+apple-id-locked-verify.com
+microsoft-account-alert-secure.com
+google-security-alert-signin.com
+
+# --- Live demo test entry -------------------------------------------------
+# neverssl.com is a well-known plain-HTTP connectivity-test site. It is listed
+# here so you can watch a real block happen out-of-the-box: with the VPN on,
+# open http://neverssl.com and it will fail to load (sinkholed), and a threat
+# row will appear. Delete this line if you don't want neverssl.com blocked.
+neverssl.com

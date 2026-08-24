@@ -1,5 +1,6 @@
 package mv.aegis;
 
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.preference.Preference;
@@ -16,6 +17,10 @@ public class FragmentSettings extends PreferenceFragmentCompat {
 
     @Override
     public boolean onPreferenceTreeClick(Preference preference) {
+        if ("manage_blocklist".equals(preference.getKey())) {
+            startActivity(new Intent(requireContext(), BlocklistActivity.class));
+            return true;
+        }
         if (preference instanceof PreferenceScreen) {
             String key = preference.getKey();
             if (key != null) {
