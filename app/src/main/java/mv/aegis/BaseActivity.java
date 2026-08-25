@@ -1,13 +1,55 @@
 package mv.aegis;
 
 import android.content.Intent;
+import android.os.Bundle;
+import android.view.View;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.mv.aegis.R;
 
 public class BaseActivity extends AppCompatActivity {
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        AegisUtils.setTheme(this);
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    public void setContentView(int layoutResID) {
+        super.setContentView(layoutResID);
+        setupWindowInsets();
+    }
+
+    @Override
+    public void setContentView(View view) {
+        super.setContentView(view);
+        setupWindowInsets();
+    }
+
+    protected void setupWindowInsets() {
+        View content = findViewById(android.R.id.content);
+        if (content != null) {
+            ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
+                Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.statusBars());
+                v.setPadding(
+                        v.getPaddingLeft(),
+                        systemBars.top,
+                        v.getPaddingRight(),
+                        v.getPaddingBottom()
+                );
+                return insets;
+            });
+            ViewCompat.requestApplyInsets(content);
+        }
+    }
+
     protected void setupBottomNav() {
         BottomNavigationView bottomNav = findViewById(R.id.bottomNav);
         if (bottomNav == null) {

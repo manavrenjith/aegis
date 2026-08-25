@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class AppDetailActivity extends AppCompatActivity {
+public class AppDetailActivity extends BaseActivity {
 
     public static final String EXTRA_UID = "uid";
     public static final String EXTRA_PACKAGE = "package";
