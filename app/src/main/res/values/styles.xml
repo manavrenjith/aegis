@@ -4,8 +4,8 @@
          CUSTOM ATTRIBUTE DECLARATIONS
          Referenced by themes.xml (colorOn/colorOff) and AdapterRule/ActivityMain
          ═══════════════════════════════════════════════════════════════════ -->
-    <attr name="colorOn" format="reference" />
-    <attr name="colorOff" format="reference" />
+    <attr name="colorOn" format="color|reference" />
+    <attr name="colorOff" format="color|reference" />
     <attr name="expander" format="reference" />
     <attr name="iconQueue" format="reference" />
     <attr name="iconMetered" format="reference" />
