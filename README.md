@@ -24,7 +24,7 @@ AEGIS gives you full visibility and control over every app's network access on y
 
 #### Current Stage: Alpha
 
-AEGIS is actively developed and the core networking stack is functional. The application currently supports VPN-based traffic interception, native packet processing through JNI, per-app firewall enforcement, real-time logging, and local SQLite persistence.
+AEGIS is actively developed and the core networking stack is functional. The application currently supports VPN-based traffic interception, native packet processing through JNI, per-app firewall enforcement, real-time logging, local SQLite persistence, on-device spyware scanner, domain blocklist management, and automated threat alerts.
 
 Current development focuses on performance, reliability, enhanced filtering and analysis capabilities, and additional quality-of-life features.
 
@@ -37,6 +37,11 @@ Current development focuses on performance, reliability, enhanced filtering and 
 - [x] Material 3 UI
 - [x] JNI integration with native packet engine
 - [x] On-device spyware and stalkerware detection & response
+- [x] In-app domain blocklist management
+- [x] Malicious domain auto-blocking & threat alerts
+- [x] Spyware & Stalkware Detection
+
+
 
 ### In Progress
 - [ ] Performance optimization
@@ -75,6 +80,13 @@ Tap any app to inspect its full connection history  every destination it has con
 
 ### 🕵️ Spyware & Stalkerware Detection
 On-device scanner combining known signature matching with behavioral heuristics (hidden launcher icons, active device admin privileges, accessibility services, sideloaded install sources). Features instant per-app firewall network blocking and assisted uninstaller handoff.
+
+### 🛡️ Automated Threat Detection & Alerts
+Background domain security engine that auto-blocks known malicious domains and flags brand lookalikes / typosquatting attempts, sending real-time heads-up notifications.
+
+### 🚫 Domain Blocklist Management
+In-app blocklist manager integrated directly into Settings, allowing users to view, add, and remove domain blocklist entries with provenance tracking (user vs. bundled).
+
 
 ### ⚙️ Simple Settings
 Configure default block policy (whitelist or blacklist mode), toggle logging, and adjust behavior for Wi-Fi vs mobile data independently.
