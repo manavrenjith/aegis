@@ -49,6 +49,8 @@ public class SpywareScanActivity extends BaseActivity {
     private LinearLayout llFindings;
     private TextView tvStatus;
     private TextView tvEmpty;
+    private TextView tvScanSummary;
+    private View scrollSpyware;
     private View pbScan;
     private Button btnScan;
     private boolean scanning;
@@ -73,6 +75,20 @@ public class SpywareScanActivity extends BaseActivity {
         tvStatus = findViewById(R.id.tvStatus);
         tvEmpty = findViewById(R.id.tvEmpty);
         pbScan = findViewById(R.id.pbScan);
+        tvScanSummary = findViewById(R.id.tvScanSummary);
+        scrollSpyware = findViewById(R.id.scrollSpyware);
+        if (scrollSpyware != null) {
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(scrollSpyware, (v, insets) -> {
+                androidx.core.graphics.Insets navBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars());
+                v.setPadding(
+                        v.getPaddingLeft(),
+                        v.getPaddingTop(),
+                        v.getPaddingRight(),
+                        (int) (16 * getResources().getDisplayMetrics().density) + navBars.bottom
+                );
+                return insets;
+            });
+        }
         btnScan = findViewById(R.id.btnScan);
         if (btnScan != null) {
             btnScan.setOnClickListener(v -> runScan());
@@ -335,7 +351,7 @@ public class SpywareScanActivity extends BaseActivity {
         if (SpywareScanner.RISK_MEDIUM.equals(risk)) {
             return R.drawable.bg_badge_orange;
         }
-        return R.drawable.bg_badge_gray;
+        return R.drawable.bg_badge_neutral;
     }
 
     @Override

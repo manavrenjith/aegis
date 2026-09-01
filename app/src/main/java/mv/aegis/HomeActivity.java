@@ -74,6 +74,22 @@ public class HomeActivity extends BaseActivity {
         if (bottomNav != null) {
             bottomNav.setSelectedItemId(R.id.nav_home);
         }
+        View nestedScrollView = findViewById(R.id.nestedScroll);
+        if (nestedScrollView != null) {
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(nestedScrollView, (v, insets) -> {
+                androidx.core.graphics.Insets navBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars());
+                int bottomNavHeight = bottomNav != null && bottomNav.getHeight() > 0
+                        ? bottomNav.getHeight()
+                        : (int) (80 * getResources().getDisplayMetrics().density);
+                v.setPadding(
+                        v.getPaddingLeft(),
+                        v.getPaddingTop(),
+                        v.getPaddingRight(),
+                        bottomNavHeight + navBars.bottom + (int) (16 * getResources().getDisplayMetrics().density)
+                );
+                return insets;
+            });
+        }
         running = true;
 
         boolean enabled = PreferenceManager.getDefaultSharedPreferences(this)
@@ -141,7 +157,7 @@ public class HomeActivity extends BaseActivity {
         setActiveChip(chipAll, chipBlocked, chipWifiOnly, chipDataOnly, chipAllowed);
 
         TextView tvDisabled = findViewById(R.id.tvDisabled);
-        tvDisabled.setVisibility(enabled ? View.GONE : View.VISIBLE);
+        tvDisabled.setVisibility(View.GONE);
 
         TextView tvNotifications = findViewById(R.id.tvNotifications);
         tvNotifications.setVisibility(View.GONE);
@@ -334,19 +350,58 @@ public class HomeActivity extends BaseActivity {
         TextView tvStatusTitle = findViewById(R.id.tvStatusTitle);
         TextView tvStatusSubtitle = findViewById(R.id.tvStatusSubtitle);
         TextView tvDisabled = findViewById(R.id.tvDisabled);
+        TextView tvVpnCaption = findViewById(R.id.tvVpnCaption);
+        ImageView ivShield = findViewById(R.id.ivShield);
+        View frameShield = findViewById(R.id.frameShield);
+
+        if (tvDisabled != null) {
+            tvDisabled.setVisibility(View.GONE);
+        }
 
         if (enabled) {
-            tvStatusBadge.setText("\u25cf Active");
-            tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.color_on));
-            tvStatusTitle.setText("Protected");
-            tvStatusSubtitle.setText("All network traffic is being filtered");
-            tvDisabled.setVisibility(View.GONE);
+            if (tvStatusBadge != null) {
+                tvStatusBadge.setText("\u25cf Active");
+                tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.color_on));
+            }
+            if (tvStatusTitle != null) {
+                tvStatusTitle.setText("Protected");
+            }
+            if (tvStatusSubtitle != null) {
+                tvStatusSubtitle.setText("All network traffic is being filtered");
+            }
+            if (tvVpnCaption != null) {
+                tvVpnCaption.setText("Tap to disable protection");
+            }
+            if (ivShield != null) {
+                ivShield.setImageTintList(android.content.res.ColorStateList.valueOf(
+                        ContextCompat.getColor(this, R.color.color_on)));
+            }
+            if (frameShield != null && frameShield.getBackground() != null) {
+                frameShield.getBackground().mutate().setTint(
+                        ContextCompat.getColor(this, R.color.color_status_active_bg));
+            }
         } else {
-            tvStatusBadge.setText("\u25cf Inactive");
-            tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.color_off));
-            tvStatusTitle.setText("Unprotected");
-            tvStatusSubtitle.setText("Traffic is not being filtered");
-            tvDisabled.setVisibility(View.VISIBLE);
+            if (tvStatusBadge != null) {
+                tvStatusBadge.setText("\u25cf Inactive");
+                tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.color_off));
+            }
+            if (tvStatusTitle != null) {
+                tvStatusTitle.setText("Unprotected");
+            }
+            if (tvStatusSubtitle != null) {
+                tvStatusSubtitle.setText("Traffic is not being filtered");
+            }
+            if (tvVpnCaption != null) {
+                tvVpnCaption.setText("Tap to enable protection");
+            }
+            if (ivShield != null) {
+                ivShield.setImageTintList(android.content.res.ColorStateList.valueOf(
+                        ContextCompat.getColor(this, R.color.color_off)));
+            }
+            if (frameShield != null && frameShield.getBackground() != null) {
+                frameShield.getBackground().mutate().setTint(
+                        ContextCompat.getColor(this, R.color.color_status_inactive_bg));
+            }
         }
     }
 

@@ -97,7 +97,7 @@
                     android:iconifiedByDefault="false"
                     app:closeIcon="@drawable/ic_delete_black_24dp"
                     app:queryBackground="@android:color/transparent"
-                    app:queryHint="Search apps…"
+                    app:queryHint="Search apps"
                     app:searchIcon="@null" />
             </FrameLayout>
 
@@ -314,6 +314,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
+                                android:id="@+id/tvVpnCaption"
                                 android:text="Tap to disable protection"
                                 android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="12sp" />
@@ -327,8 +328,8 @@
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintEnd_toEndOf="parent"
                             app:layout_constraintTop_toTopOf="parent"
-                            app:thumbTint="@color/switch_thumb_tint"
-                            app:trackTint="@color/switch_track_tint" />
+                            app:thumbTint="@color/switch_thumb_selector"
+                            app:trackTint="@color/switch_track_selector" />
                     </androidx.constraintlayout.widget.ConstraintLayout>
 
                 </LinearLayout>
@@ -781,11 +782,12 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginEnd="8dp"
-                        android:checkable="false"
+                        android:checkable="true"
+                        android:checked="true"
                         android:text="All"
-                        android:textColor="@color/color_on"
+                        android:textColor="@color/chip_text_selector"
                         android:textSize="13sp"
-                        app:chipBackgroundColor="@color/color_status_active_bg"
+                        app:chipBackgroundColor="@color/chip_bg_selector"
                         app:chipStrokeWidth="0dp"
                         app:chipIconVisible="false"
                         app:checkedIconVisible="false" />
@@ -796,11 +798,12 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginEnd="8dp"
-                        android:checkable="false"
+                        android:checkable="true"
+                        android:checked="false"
                         android:text="Blocked"
-                        android:textColor="@color/color_label_secondary"
+                        android:textColor="@color/chip_text_selector"
                         android:textSize="13sp"
-                        app:chipBackgroundColor="@color/color_separator"
+                        app:chipBackgroundColor="@color/chip_bg_selector"
                         app:chipStrokeWidth="0dp"
                         app:chipIconVisible="false"
                         app:checkedIconVisible="false" />
@@ -811,11 +814,12 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginEnd="8dp"
-                        android:checkable="false"
+                        android:checkable="true"
+                        android:checked="false"
                         android:text="WiFi only"
-                        android:textColor="@color/color_label_secondary"
+                        android:textColor="@color/chip_text_selector"
                         android:textSize="13sp"
-                        app:chipBackgroundColor="@color/color_separator"
+                        app:chipBackgroundColor="@color/chip_bg_selector"
                         app:chipStrokeWidth="0dp"
                         app:chipIconVisible="false"
                         app:checkedIconVisible="false" />
@@ -826,11 +830,12 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginEnd="8dp"
-                        android:checkable="false"
+                        android:checkable="true"
+                        android:checked="false"
                         android:text="Data only"
-                        android:textColor="@color/color_label_secondary"
+                        android:textColor="@color/chip_text_selector"
                         android:textSize="13sp"
-                        app:chipBackgroundColor="@color/color_separator"
+                        app:chipBackgroundColor="@color/chip_bg_selector"
                         app:chipStrokeWidth="0dp"
                         app:chipIconVisible="false"
                         app:checkedIconVisible="false" />
@@ -840,11 +845,12 @@
                         style="@style/Widget.Material3.Chip.Filter"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:checkable="false"
+                        android:checkable="true"
+                        android:checked="false"
                         android:text="Allowed"
-                        android:textColor="@color/color_label_secondary"
+                        android:textColor="@color/chip_text_selector"
                         android:textSize="13sp"
-                        app:chipBackgroundColor="@color/color_separator"
+                        app:chipBackgroundColor="@color/chip_bg_selector"
                         app:chipStrokeWidth="0dp"
                         app:chipIconVisible="false"
                         app:checkedIconVisible="false" />

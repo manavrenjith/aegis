@@ -73,15 +73,15 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:background="@drawable/bg_badge_red"
+                android:background="@drawable/bg_badge_neutral"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
                 android:paddingTop="4dp"
                 android:paddingBottom="4dp"
-                android:textColor="@color/md_theme_onPrimary"
+                android:textColor="@color/color_badge_neutral_text"
                 android:textSize="11sp"
                 android:textStyle="bold"
-                tools:text="HIGH RISK" />
+                tools:text="LOW RISK" />
         </LinearLayout>
 
         <!-- Reasons list -->
@@ -100,7 +100,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:gravity="end"
+            android:gravity="end|center_vertical"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
@@ -112,14 +112,14 @@
                 android:paddingEnd="12dp"
                 android:text="Block network"
                 android:textAllCaps="false"
-                android:textColor="@color/color_off"
+                android:textColor="@color/color_tonal_btn_text"
                 android:textSize="13sp"
-                app:backgroundTint="#FFE5E5"
+                app:backgroundTint="@color/color_tonal_btn_bg"
                 app:cornerRadius="19dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnUninstall"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
                 android:layout_marginStart="8dp"
@@ -127,10 +127,9 @@
                 android:paddingEnd="12dp"
                 android:text="Uninstall"
                 android:textAllCaps="false"
-                android:textColor="@color/md_theme_primary"
+                android:textColor="@color/color_destructive_text"
                 android:textSize="13sp"
-                app:backgroundTint="#E0EEFF"
-                app:cornerRadius="19dp" />
+                app:backgroundTint="@android:color/transparent" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

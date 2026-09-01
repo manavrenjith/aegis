@@ -59,16 +59,18 @@
         android:textColor="@color/color_label_secondary"
         android:textSize="13sp" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnScan"
+        style="@style/Widget.Material3.Button.TonalButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:backgroundTint="@color/md_theme_primary"
         android:text="Rescan"
         android:textAllCaps="false"
-        android:textColor="@color/md_theme_onPrimary" />
+        android:textColor="@color/md_theme_onPrimaryContainer"
+        app:backgroundTint="@color/md_theme_primaryContainer"
+        app:cornerRadius="20dp" />
 
     <!-- Status row: spinner + message -->
     <LinearLayout
@@ -97,6 +99,20 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- One-line summary above list (Item 6) -->
+    <TextView
+        android:id="@+id/tvScanSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:text="@string/spyware_scan_clean_summary"
+        android:textColor="@color/color_label_secondary"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/tvEmpty"
         android:layout_width="match_parent"
@@ -111,6 +127,7 @@
         android:visibility="gone" />
 
     <ScrollView
+        android:id="@+id/scrollSpyware"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"

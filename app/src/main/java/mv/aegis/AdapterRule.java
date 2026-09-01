@@ -114,18 +114,18 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
             });
         }
 
-        holder.ibWifi.setImageResource(rule.wifi_blocked ? R.drawable.wifi_off : R.drawable.wifi_on);
+        updateWifiToggle(holder.ibWifi, rule);
         holder.ibWifi.setOnClickListener(v -> {
             rule.wifi_blocked = !rule.wifi_blocked;
-            holder.ibWifi.setImageResource(rule.wifi_blocked ? R.drawable.wifi_off : R.drawable.wifi_on);
+            updateWifiToggle(holder.ibWifi, rule);
             FirewallRule.updateRule(context, rule);
             FirewallService.reload("wifi", context, false);
         });
 
-        holder.ibOther.setImageResource(rule.other_blocked ? R.drawable.other_off : R.drawable.other_on);
+        updateOtherToggle(holder.ibOther, rule);
         holder.ibOther.setOnClickListener(v -> {
             rule.other_blocked = !rule.other_blocked;
-            holder.ibOther.setImageResource(rule.other_blocked ? R.drawable.other_off : R.drawable.other_on);
+            updateOtherToggle(holder.ibOther, rule);
             FirewallRule.updateRule(context, rule);
             FirewallService.reload("other", context, false);
         });
@@ -175,6 +175,28 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
         }
 
         wireExpandedSection(holder.itemView, rule);
+    }
+
+        private void updateWifiToggle(android.widget.ImageButton ib, FirewallRule rule) {
+        ib.setImageResource(rule.wifi_blocked ? R.drawable.wifi_off : R.drawable.wifi_on);
+        int tintColor = ContextCompat.getColor(context, rule.wifi_blocked ? R.color.color_off : R.color.color_on);
+        androidx.core.widget.ImageViewCompat.setImageTintList(ib, android.content.res.ColorStateList.valueOf(tintColor));
+        String appName = rule.name != null ? rule.name : (rule.packageName != null ? rule.packageName : "");
+        ib.setContentDescription(context.getString(
+                rule.wifi_blocked ? R.string.desc_wifi_blocked : R.string.desc_wifi_allowed,
+                appName
+        ));
+    }
+
+    private void updateOtherToggle(android.widget.ImageButton ib, FirewallRule rule) {
+        ib.setImageResource(rule.other_blocked ? R.drawable.other_off : R.drawable.other_on);
+        int tintColor = ContextCompat.getColor(context, rule.other_blocked ? R.color.color_off : R.color.color_on);
+        androidx.core.widget.ImageViewCompat.setImageTintList(ib, android.content.res.ColorStateList.valueOf(tintColor));
+        String appName = rule.name != null ? rule.name : (rule.packageName != null ? rule.packageName : "");
+        ib.setContentDescription(context.getString(
+                rule.other_blocked ? R.string.desc_mobile_blocked : R.string.desc_mobile_allowed,
+                appName
+        ));
     }
 
     private void wireExpandedSection(View view, FirewallRule rule) {

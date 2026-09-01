@@ -91,6 +91,36 @@
     <color name="md_theme_surfaceContainerHigh">#3A3A3C</color>
     <color name="md_theme_surfaceContainerHighest">#48484A</color>
 
+    <!-- Switch tints (dark M3 purple accent on / neutral off) -->
+    <color name="switch_thumb_tint">#D0BCFF</color>
+    <color name="switch_track_tint">#4F378B</color>
+    <color name="switch_thumb_on">#D0BCFF</color>
+    <color name="switch_thumb_off">#938F96</color>
+    <color name="switch_track_on">#4F378B</color>
+    <color name="switch_track_off">#36343B</color>
+
+    <!-- Stat icon tiles (dark tonal containers) -->
+    <color name="color_stat_blue_bg">#1A2B3C</color>
+    <color name="color_stat_orange_bg">#38240D</color>
+    <color name="color_stat_red_bg">#3D1414</color>
+
+    <!-- Spyware scan buttons (dark tonal container with light label) -->
+    <color name="color_tonal_btn_bg">#3A3A3C</color>
+    <color name="color_tonal_btn_text">#E5E5EA</color>
+    <color name="color_destructive_text">#FF6961</color>
+
+    <!-- Neutral risk badge (dark tonal) -->
+    <color name="color_badge_neutral_bg">#3A3A3C</color>
+    <color name="color_badge_neutral_text">#E5E5EA</color>
+
+    <!-- Filter chips (dark purple accent matching UI) -->
+    <color name="color_chip_selected_bg">#381E72</color>
+    <color name="color_chip_selected_text">#D0BCFF</color>
+    <color name="color_chip_unselected_bg">@color/color_separator</color>
+
+    <!-- Search container (dark mode filled field) -->
+    <color name="color_search_bg">#2C2C2E</color>
+
     <!-- =======================================================================
          M3 OUTLINE (dark)
          ======================================================================= -->

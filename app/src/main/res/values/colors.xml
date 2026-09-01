@@ -82,9 +82,37 @@
     <color name="md_theme_surfaceContainer">#F2F2F7</color>
     <color name="md_theme_surfaceContainerHigh">#EAEAEF</color>
     <color name="md_theme_surfaceContainerHighest">#E5E5EA</color>
-    <!--====================fix=============================-->
+        <!-- =======================================================================
+         SWITCH TINTS (M3 purple accent on / neutral off)
+         ======================================================================= -->
     <color name="switch_thumb_tint">#FF6200EE</color>
     <color name="switch_track_tint">#80BB86FC</color>
+    <color name="switch_thumb_on">#6200EE</color>
+    <color name="switch_thumb_off">#79747E</color>
+    <color name="switch_track_on">#E8DEF8</color>
+    <color name="switch_track_off">#E7E0EC</color>
+
+    <!-- Stat icon tiles (light pastels) -->
+    <color name="color_stat_blue_bg">#E0EEFF</color>
+    <color name="color_stat_orange_bg">#FFF3E0</color>
+    <color name="color_stat_red_bg">#FFE0E0</color>
+
+    <!-- Spyware scan buttons -->
+    <color name="color_tonal_btn_bg">#E5E5EA</color>
+    <color name="color_tonal_btn_text">#1C1C1E</color>
+    <color name="color_destructive_text">#D32F2F</color>
+
+    <!-- Neutral risk badge -->
+    <color name="color_badge_neutral_bg">#E5E5EA</color>
+    <color name="color_badge_neutral_text">#636366</color>
+
+    <!-- Filter chips (purple accent matching UI) -->
+    <color name="color_chip_selected_bg">#F2E7FE</color>
+    <color name="color_chip_selected_text">#6200EE</color>
+    <color name="color_chip_unselected_bg">@color/color_separator</color>
+
+    <!-- Search container (light mode filled field) -->
+    <color name="color_search_bg">#E5E5EA</color>
     <!-- =======================================================================
          M3 OUTLINE
          ======================================================================= -->

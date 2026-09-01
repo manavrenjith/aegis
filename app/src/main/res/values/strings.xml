@@ -85,4 +85,17 @@
         <item>1</item>
         <item>2</item>
     </string-array>
+    <!-- Setting subtitles (Item 8) -->
+    <string name="summary_defaults">Default allow/block rules for Wi-Fi and mobile data</string>
+    <string name="summary_options_root">Theme, install notifications, and update checks</string>
+    <string name="summary_advanced_root">System apps, packet filtering, and access logging</string>
+
+    <!-- Spyware scan summary (Item 6) -->
+    <string name="spyware_scan_clean_summary">No known spyware found. These apps have powerful permissions.</string>
+
+    <!-- Accessible labels for app rows (Item 11) -->
+    <string name="desc_wifi_allowed">Wi-Fi allowed for %1$s, tap to block</string>
+    <string name="desc_wifi_blocked">Wi-Fi blocked for %1$s, tap to allow</string>
+    <string name="desc_mobile_allowed">Mobile data allowed for %1$s, tap to block</string>
+    <string name="desc_mobile_blocked">Mobile data blocked for %1$s, tap to allow</string>
 </resources>
