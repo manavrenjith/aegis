@@ -6,7 +6,7 @@
 		app:key="screen_defaults"
 		app:title="@string/setting_defaults"
 		app:summary="@string/summary_defaults"
-		app:icon="@drawable/ic_security_white_24dp"
+		app:icon="@drawable/ic_security_settings"
 		app:widgetLayout="@layout/preference_chevron">
 
 		<androidx.preference.SwitchPreferenceCompat
@@ -52,7 +52,7 @@
 		app:key="screen_options"
 		app:title="@string/setting_options"
 		app:summary="@string/summary_options_root"
-		app:icon="@drawable/ic_settings_black_24dp"
+		app:icon="@drawable/ic_settings_settings"
 		app:widgetLayout="@layout/preference_chevron">
 
 		<ListPreference
@@ -97,7 +97,7 @@
 		app:key="screen_advanced_options"
 		app:title="@string/setting_advanced_options"
 		app:summary="@string/summary_advanced_root"
-		app:icon="@drawable/ic_perm_data_setting_black_24dp"
+		app:icon="@drawable/ic_perm_data_setting_settings"
 		app:widgetLayout="@layout/preference_chevron">
 
 		<androidx.preference.SwitchPreferenceCompat
@@ -161,7 +161,7 @@
 		app:key="manage_blocklist"
 		app:title="@string/setting_manage_blocklist"
 		app:summary="@string/summary_manage_blocklist"
-		app:icon="@drawable/baseline_file_copy_24"
+		app:icon="@drawable/baseline_file_copy_settings"
 		app:widgetLayout="@layout/preference_chevron" />
 
 </PreferenceScreen>

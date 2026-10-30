@@ -31,6 +31,8 @@
     <style name="AegisPreferenceTheme" parent="PreferenceThemeOverlay.v14.Material">
         <!-- Category title / summary color -->
         <item name="android:textColorSecondary">@color/color_label_secondary</item>
+        <!-- Theme-aware tint for preference icons -->
+        <item name="android:iconTint">@color/color_label_secondary</item>
         <!-- Remove left icon-space gap on every row -->
         <item name="iconSpaceReserved">false</item>
     </style>
