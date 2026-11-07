@@ -380,6 +380,12 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 this.usage.Received += other.usage.Received;
                 this.usage.Time = other.timestamp;
             }
+            if (this.rr != null && other.rr != null) {
+                this.rr.Time = other.timestamp;
+                this.rr.TTL = other.rr.TTL;
+                this.rr.Resource = other.rr.Resource;
+                this.rr.AName = other.rr.AName;
+            }
         }
     }
 
@@ -454,6 +460,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
                     } else if (item.packet != null) {
                         applyLogInternal(db, item.packet, item.dname, item.connection, item.interactive);
                         hasLogs = true;
+                    } else if (item.rr != null) {
+                        applyDnsInternal(db, item.rr);
                     }
                 }
                 db.setTransactionSuccessful();
@@ -942,6 +950,15 @@ public class AegisDatabase extends SQLiteOpenHelper {
             return;
         }
 
+        lock.writeLock().lock();
+        try {
+            applyDnsInternal(getWritableDatabase(), rr);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private void applyDnsInternal(SQLiteDatabase db, ResourceRecord rr) {
         ContentValues cv = new ContentValues();
         cv.put("time", rr.Time);
         cv.put("qname", rr.QName);
@@ -950,12 +967,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         cv.put("ttl", rr.TTL);
         cv.put("uid", rr.uid);
 
-        lock.writeLock().lock();
-        try {
-            getWritableDatabase().insertWithOnConflict("dns", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
-        } finally {
-            lock.writeLock().unlock();
-        }
+        db.insertWithOnConflict("dns", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
     public String getQName(int uid, String ip) {

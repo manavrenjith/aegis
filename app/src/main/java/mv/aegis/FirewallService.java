@@ -831,6 +831,9 @@ public class FirewallService extends VpnService {
         if (item.usage != null) {
             item.usage.Time = now;
         }
+        if (item.rr != null) {
+            item.rr.Time = now;
+        }
 
         int uid = getBatchItemUid(item);
         if (uid < 0) {
@@ -913,7 +916,7 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        AegisDatabase.getInstance(this).insertDns(rr);
+        enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
 
         // Best-effort domain -> uid attribution for threat logging (Feature 1/4).
         // uid is real in the TLS SNI path (ip.c) and -1 in the DNS-answer path (dns.c).
