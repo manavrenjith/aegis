@@ -76,6 +76,18 @@ public final class AegisUtils {
         return appId >= 10000 && appId <= 19999;
     }
 
+    public static String[] packagesForUid(PackageManager pm, int uid) {
+        if (pm == null || uid < 0) {
+            return null;
+        }
+        int lookupUid = isCloneUid(uid) ? (uid % 100000) : uid;
+        try {
+            return pm.getPackagesForUid(lookupUid);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     public static String cloneSuffix(int uid, Context context) {
         if (!isCloneUid(uid) || context == null) {
             return "";
