@@ -31,6 +31,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import androidx.core.app.NotificationCompat;
@@ -83,6 +85,7 @@ public class FirewallService extends VpnService {
     private volatile CommandHandler commandHandler;
     private static Object jni_lock = new Object();
     private static long jni_context = 0;
+    private static volatile CountDownLatch activeTeardownLatch = null;
     private Thread tunnelThread = null;
     private volatile boolean tunnelStillRunning = false;
     private ThreatDetector threatDetector;
@@ -230,6 +233,26 @@ public class FirewallService extends VpnService {
 
     private void start() {
         Log.d(TAG, "start() BEGIN");
+
+        CountDownLatch priorTeardown = activeTeardownLatch;
+        if (priorTeardown != null && priorTeardown.getCount() > 0) {
+            Log.d(TAG, "Waiting for prior teardown to complete...");
+            try {
+                if (!priorTeardown.await(3, TimeUnit.SECONDS)) {
+                    Log.w(TAG, "Timed out (3s) waiting for prior teardown to complete");
+                }
+            } catch (InterruptedException e) {
+                Log.w(TAG, "Interrupted while waiting for prior teardown", e);
+            }
+        }
+
+        synchronized (jni_lock) {
+            if (jni_context == 0) {
+                Log.d(TAG, "jni_init called in start after waiting for prior teardown");
+                jni_context = jni_init(Build.VERSION.SDK_INT);
+            }
+        }
+
         currentRules = FirewallRule.getRules(false, this);  // ← add this
         if (vpn == null) {
             stopForeground(true);
@@ -557,13 +580,22 @@ public class FirewallService extends VpnService {
         Looper snapshotCommandLooper = commandLooper;
         commandLooper = null;
 
-        new Thread(() -> teardown(
-                snapshotContext,
-                snapshotTunnelThread,
-                snapshotLogBatchThread,
-                snapshotVpn,
-                snapshotCommandLooper
-        ), "FirewallTeardown").start();
+        CountDownLatch latch = new CountDownLatch(1);
+        activeTeardownLatch = latch;
+
+        new Thread(() -> {
+            try {
+                teardown(
+                        snapshotContext,
+                        snapshotTunnelThread,
+                        snapshotLogBatchThread,
+                        snapshotVpn,
+                        snapshotCommandLooper
+                );
+            } finally {
+                latch.countDown();
+            }
+        }, "FirewallTeardown").start();
 
         super.onDestroy();
     }
