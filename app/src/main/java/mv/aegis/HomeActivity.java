@@ -56,13 +56,11 @@ public class HomeActivity extends BaseActivity {
     private ExecutorService executor = Executors.newSingleThreadExecutor();
     private Handler handler = new Handler(Looper.getMainLooper());
     private AdapterRule adapter = null;
-    private boolean broadcastTriggered = false;
 
     private final BroadcastReceiver onRulesChanged = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (ACTION_RULES_CHANGED.equals(intent.getAction())) {
-                broadcastTriggered = true;
                 updateApplicationList(getCurrentSearchText());
             }
         }
@@ -471,11 +469,7 @@ public class HomeActivity extends BaseActivity {
         super.onResume();
         LocalBroadcastManager.getInstance(this)
                 .registerReceiver(onRulesChanged, new IntentFilter(ACTION_RULES_CHANGED));
-        if (broadcastTriggered) {
-            broadcastTriggered = false;
-        } else {
-            updateApplicationList(getCurrentSearchText());
-        }
+        updateApplicationList(getCurrentSearchText());
         updateStatCards();
         updateThreatCard();
     }
