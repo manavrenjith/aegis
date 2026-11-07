@@ -86,6 +86,7 @@ public class AdapterActivity extends CursorAdapter {
                     }
                 });
             } else {
+                ivIcon.setTag(null);
                 ivIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
             }
         } catch (Throwable t) {
