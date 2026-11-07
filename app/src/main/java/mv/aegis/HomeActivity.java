@@ -163,25 +163,28 @@ public class HomeActivity extends BaseActivity {
         TextView tvNotifications = findViewById(R.id.tvNotifications);
         tvNotifications.setVisibility(View.GONE);
 
-        SearchView searchView = findViewById(R.id.searchView);
-        if (searchView != null) {
-            searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-                @Override
-                public boolean onQueryTextSubmit(String query) {
-                    if (adapter != null) {
-                        adapter.getFilter().filter(query);
+        {
+            View v = findViewById(R.id.searchView);
+            if (v instanceof SearchView) {
+                SearchView searchView = (SearchView) v;
+                searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+                    @Override
+                    public boolean onQueryTextSubmit(String query) {
+                        if (adapter != null) {
+                            adapter.getFilter().filter(query);
+                        }
+                        return false;
                     }
-                    return false;
-                }
 
-                @Override
-                public boolean onQueryTextChange(String newText) {
-                    if (adapter != null) {
-                        adapter.getFilter().filter(newText);
+                    @Override
+                    public boolean onQueryTextChange(String newText) {
+                        if (adapter != null) {
+                            adapter.getFilter().filter(newText);
+                        }
+                        return true;
                     }
-                    return true;
-                }
-            });
+                });
+            }
         }
 
         swipeRefresh = findViewById(R.id.swipeRefresh);
@@ -454,8 +457,9 @@ public class HomeActivity extends BaseActivity {
     }
 
     private String getCurrentSearchText() {
-        SearchView searchView = findViewById(R.id.searchView);
-        if (searchView != null) {
+        View v = findViewById(R.id.searchView);
+        if (v instanceof SearchView) {
+            SearchView searchView = (SearchView) v;
             CharSequence query = searchView.getQuery();
             if (query != null && query.length() > 0) {
                 return query.toString();
