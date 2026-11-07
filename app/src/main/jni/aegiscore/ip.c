@@ -174,7 +174,19 @@ void handle_ip(const struct arguments *args,
                 return;
             }
             struct ip6_ext *ext = (struct ip6_ext *) (pkt + off);
-            size_t extlen = 8 + ext->ip6e_len;
+            size_t extlen;
+            if (protocol == 0 || protocol == 43 || protocol == 60) {
+                // Hop-by-Hop (0), Routing (43), Destination Options (60)
+                extlen = (ext->ip6e_len + 1) * 8;
+            } else if (protocol == 44) {
+                // Fragment (44)
+                extlen = 8;
+            } else if (protocol == 51) {
+                // Authentication Header (AH, 51)
+                extlen = (ext->ip6e_len + 2) * 4;
+            } else {
+                extlen = (ext->ip6e_len + 1) * 8;
+            }
             if (off + extlen > length) {
                 log_android(ANDROID_LOG_WARN, "IP6 packet too short for extension body");
                 return;
