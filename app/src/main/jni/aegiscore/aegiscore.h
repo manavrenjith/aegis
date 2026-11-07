@@ -516,7 +516,18 @@ int jniCheckException(JNIEnv *env);
 
 int sdk_int(JNIEnv *env);
 
-void log_android(int prio, const char *fmt, ...);
+void log_android_impl(int prio, const char *fmt, ...);
+
+#if defined(NDEBUG)
+#define log_android(prio, ...) \
+    do { \
+        if ((prio) > ANDROID_LOG_DEBUG) { \
+            log_android_impl((prio), __VA_ARGS__); \
+        } \
+    } while (0)
+#else
+#define log_android(prio, ...) log_android_impl((prio), __VA_ARGS__)
+#endif
 
 void log_packet(const struct arguments *args, jobject jpacket);
 

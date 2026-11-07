@@ -179,7 +179,7 @@ public class FirewallService extends VpnService {
             Log.e(TAG, "Failed to exclude self from VPN", e);
         }
         Log.d(TAG, "jni_start called, context=" + jni_context);
-        jni_start(jni_context, Log.DEBUG);  // Log.DEBUG = 3 — enables packet logging
+        jni_start(jni_context, com.mv.aegis.BuildConfig.DEBUG ? Log.DEBUG : Log.WARN);
 
         if (tunFd != null && tunFd.getFileDescriptor().valid()) {
             try {
@@ -680,7 +680,6 @@ public class FirewallService extends VpnService {
 
     public void logPacket(Packet packet) {
         if (packet == null) return;
-        Log.d(TAG, "logPacket uid=" + packet.uid + " daddr=" + packet.daddr);
         AegisDatabase.getInstance(this)
                 .insertLog(packet, null, 0, AegisUtils.isInteractive(this));
     }
