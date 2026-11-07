@@ -164,6 +164,21 @@ public final class AegisUtils {
             return names;
         }
 
+        if (uid >= 100000) {
+            int appId = uid % 100000;
+            int n = uid / 100000;
+            if (appId >= 10000) {
+                List<String> baseNames = getApplicationNames(appId, context);
+                for (String baseName : baseNames) {
+                    names.add(baseName + " (user " + n + ")");
+                }
+                if (!names.isEmpty()) {
+                    Collections.sort(names);
+                    return names;
+                }
+            }
+        }
+
         PackageManager pm = context.getPackageManager();
         try {
             String[] packages = pm.getPackagesForUid(uid);

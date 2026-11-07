@@ -84,6 +84,9 @@ public class AppListActivity extends BaseActivity {
             Cursor item = (Cursor) adapter.getItem(position);
             int uid = item.getInt(item.getColumnIndexOrThrow("uid"));
             String[] packages = getPackageManager().getPackagesForUid(uid);
+            if ((packages == null || packages.length == 0) && uid >= 100000 && (uid % 100000) >= 10000) {
+                packages = getPackageManager().getPackagesForUid(uid % 100000);
+            }
             String pkg = (packages != null && packages.length > 0) ? packages[0] : "uid:" + uid;
 
             Intent detail = new Intent(this, AppDetailActivity.class);

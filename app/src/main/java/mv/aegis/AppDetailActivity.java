@@ -116,7 +116,12 @@ public class AppDetailActivity extends BaseActivity {
 
     private void bindRuleToUI() {
         TextView tvAppName = findViewById(R.id.tvAppName);
-        tvAppName.setText(rule != null ? rule.name : "Unknown");
+        if (rule != null) {
+            tvAppName.setText(rule.name);
+        } else {
+            List<String> names = AegisUtils.getApplicationNames(uid, this);
+            tvAppName.setText((names != null && !names.isEmpty()) ? names.get(0) : "Unknown");
+        }
 
         TextView tvPackageName = findViewById(R.id.tvPackageName);
         tvPackageName.setText(packageName == null ? "" : packageName);

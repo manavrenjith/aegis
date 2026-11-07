@@ -49,7 +49,13 @@ public class AdapterActivity extends CursorAdapter {
 
         List<String> names = AegisUtils.getApplicationNames(uid, context);
         if (names.isEmpty()) {
-            tvName.setText(Integer.toString(uid));
+            if (uid >= 100000 && (uid % 100000) >= 10000) {
+                int appId = uid % 100000;
+                int n = uid / 100000;
+                tvName.setText("UID:" + appId + " (user " + n + ")");
+            } else {
+                tvName.setText(Integer.toString(uid));
+            }
         } else {
             tvName.setText(names.get(0));
         }
@@ -57,6 +63,9 @@ public class AdapterActivity extends CursorAdapter {
         String[] pkgs = null;
         try {
             pkgs = pm.getPackagesForUid(uid);
+            if ((pkgs == null || pkgs.length == 0) && uid >= 100000 && (uid % 100000) >= 10000) {
+                pkgs = pm.getPackagesForUid(uid % 100000);
+            }
         } catch (SecurityException e) {
             Log.w("AdapterActivity", "Cannot get packages for uid=" + uid);
         }
