@@ -369,23 +369,13 @@ public class AegisDatabase extends SQLiteOpenHelper {
             if (other == null) {
                 return;
             }
+            if (this.packet == null || other.packet == null) {
+                return;
+            }
             this.timestamp = other.timestamp;
             this.interactive = other.interactive;
-            if (this.packet != null && other.packet != null) {
-                this.packet.time = other.timestamp;
-                this.connection += (other.connection > 0 ? other.connection : 1);
-            }
-            if (this.usage != null && other.usage != null) {
-                this.usage.Sent += other.usage.Sent;
-                this.usage.Received += other.usage.Received;
-                this.usage.Time = other.timestamp;
-            }
-            if (this.rr != null && other.rr != null) {
-                this.rr.Time = other.timestamp;
-                this.rr.TTL = other.rr.TTL;
-                this.rr.Resource = other.rr.Resource;
-                this.rr.AName = other.rr.AName;
-            }
+            this.packet.time = other.timestamp;
+            this.connection += (other.connection > 0 ? other.connection : 1);
         }
     }
 

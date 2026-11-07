@@ -907,10 +907,8 @@ public class FirewallService extends VpnService {
             boolean isUsageOrDns = (item.usage != null || item.rr != null);
 
             if (isUsageOrDns) {
-                // Usage and DNS items are never dropped or overflowed: always enqueue them
-                seenPairs.put(key, Boolean.TRUE);
+                // Usage and DNS items are never dropped or overflowed: only added to the queue
                 logQueue.add(item);
-                pendingEntries.put(key, item);
                 if (wasEmpty || logQueue.size() == 100) {
                     logQueueLock.notify();
                 }
