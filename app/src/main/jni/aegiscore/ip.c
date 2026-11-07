@@ -168,6 +168,10 @@ void handle_ip(const struct arguments *args,
         size_t off = sizeof(struct ip6_hdr);
         protocol = ip6hdr->ip6_nxt;
         while (!is_upper_layer(protocol) && is_lower_layer(protocol)) {
+            if (protocol == 50) {
+                // Protocol 50 (ESP): payload is encrypted, stop extension walk
+                break;
+            }
             log_android(ANDROID_LOG_WARN, "IP6 extension %d", protocol);
             if (off + sizeof(struct ip6_ext) > length) {
                 log_android(ANDROID_LOG_WARN, "IP6 packet too short for extension header");
@@ -180,6 +184,16 @@ void handle_ip(const struct arguments *args,
                 extlen = (ext->ip6e_len + 1) * 8;
             } else if (protocol == 44) {
                 // Fragment (44)
+                if (off + sizeof(struct ip6_frag) > length) {
+                    log_android(ANDROID_LOG_WARN, "IP6 packet too short for fragment header");
+                    return;
+                }
+                struct ip6_frag *frag = (struct ip6_frag *) (pkt + off);
+                uint16_t frag_offset = ntohs(frag->ip6f_offlg) & 0xfff8;
+                if (frag_offset != 0) {
+                    log_android(ANDROID_LOG_WARN, "IP6 fragment offset %u, unparseable fragment dropped", frag_offset);
+                    return;
+                }
                 extlen = 8;
             } else if (protocol == 51) {
                 // Authentication Header (AH, 51)

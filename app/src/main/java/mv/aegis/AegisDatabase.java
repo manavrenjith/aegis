@@ -459,11 +459,15 @@ public class AegisDatabase extends SQLiteOpenHelper {
             } finally {
                 db.endTransaction();
             }
-            if (hasLogs) {
-                notifyLogChanged();
-            }
-            if (hasUsage) {
-                notifyAccessChanged();
+            try {
+                if (hasLogs) {
+                    notifyLogChanged();
+                }
+                if (hasUsage) {
+                    notifyAccessChanged();
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Failed to notify listeners after batch commit", t);
             }
         } finally {
             lock.writeLock().unlock();

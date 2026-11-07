@@ -1040,6 +1040,10 @@ public class FirewallService extends VpnService {
                 } catch (Throwable firstAttempt) {
                     Log.w(TAG, "insertBatch failed, retrying once", firstAttempt);
                     try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ignored) {
+                    }
+                    try {
                         AegisDatabase.getInstance(this).insertBatch(batch);
                     } catch (Throwable secondAttempt) {
                         Log.e(TAG, "insertBatch retry failed, items lost", secondAttempt);
