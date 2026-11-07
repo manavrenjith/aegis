@@ -83,8 +83,8 @@ public class AppListActivity extends BaseActivity {
         lvActivity.setOnItemClickListener((parent, view, position, id) -> {
             Cursor item = (Cursor) adapter.getItem(position);
             int uid = item.getInt(item.getColumnIndexOrThrow("uid"));
-            String[] packages = getPackageManager().getPackagesForUid(uid);
-            String pkg = (packages != null && packages.length > 0) ? packages[0] : "uid:" + uid;
+            String[] packages = AegisUtils.packagesForUid(getPackageManager(), uid);
+            String pkg = (packages != null && packages.length > 0) ? packages[0] : (uid < 0 ? "Unknown" : "uid:" + uid);
 
             Intent detail = new Intent(this, AppDetailActivity.class);
             detail.putExtra(AppDetailActivity.EXTRA_UID, uid);

@@ -75,12 +75,16 @@
 #define SOCKS5_CONNECT 4
 #define SOCKS5_CONNECTED 5
 
+struct uid_cache_entry;
+
 struct context {
     pthread_mutex_t lock;
     int pipefds[2];
     int stopping;
     int sdk;
     struct ng_session *ng_session;
+    int uid_cache_size;
+    struct uid_cache_entry *uid_cache;
 };
 
 struct arguments {
@@ -424,6 +428,10 @@ jboolean handle_icmp(const struct arguments *args,
 
 int has_udp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload);
 
+struct ng_session *get_udp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload);
+
+struct ng_session *get_tcp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload);
+
 void block_udp(const struct arguments *args,
                const uint8_t *pkt, size_t length,
                const uint8_t *payload,
@@ -488,11 +496,11 @@ uint8_t char2nible(const char c);
 
 void hex2bytes(const char *hex, uint8_t *buffer);
 
-jint get_uid(const int version, const int protocol,
+jint get_uid(struct context *ctx, const int version, const int protocol,
              const void *saddr, const uint16_t sport,
              const void *daddr, const uint16_t dport);
 
-jint get_uid_sub(const int version, const int protocol,
+jint get_uid_sub(struct context *ctx, const int version, const int protocol,
                  const void *saddr, const uint16_t sport,
                  const void *daddr, const uint16_t dport,
                  const char *source, const char *dest,
@@ -516,7 +524,18 @@ int jniCheckException(JNIEnv *env);
 
 int sdk_int(JNIEnv *env);
 
-void log_android(int prio, const char *fmt, ...);
+void log_android_impl(int prio, const char *fmt, ...);
+
+#if defined(NDEBUG)
+#define log_android(prio, ...) \
+    do { \
+        if ((prio) > ANDROID_LOG_DEBUG) { \
+            log_android_impl((prio), __VA_ARGS__); \
+        } \
+    } while (0)
+#else
+#define log_android(prio, ...) log_android_impl((prio), __VA_ARGS__)
+#endif
 
 void log_packet(const struct arguments *args, jobject jpacket);
 

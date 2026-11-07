@@ -10,6 +10,7 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.ActionBar;
@@ -95,7 +96,7 @@ public class AppDetailActivity extends BaseActivity {
         executor.execute(() -> {
             FirewallRule foundRule = null;
             try {
-                List<FirewallRule> rules = FirewallRule.getRules(false, this);
+                List<FirewallRule> rules = FirewallRule.getRules(true, this);
                 for (FirewallRule firewallRule : rules) {
                     if (firewallRule.uid == uid) {
                         foundRule = firewallRule;
@@ -116,10 +117,15 @@ public class AppDetailActivity extends BaseActivity {
 
     private void bindRuleToUI() {
         TextView tvAppName = findViewById(R.id.tvAppName);
-        tvAppName.setText(rule != null ? rule.name : "Unknown");
+        if (rule != null) {
+            tvAppName.setText(rule.name);
+        } else {
+            List<String> names = AegisUtils.getApplicationNames(uid, this);
+            tvAppName.setText((names != null && !names.isEmpty()) ? names.get(0) : "Unknown app");
+        }
 
         TextView tvPackageName = findViewById(R.id.tvPackageName);
-        tvPackageName.setText(packageName == null ? "" : packageName);
+        tvPackageName.setText(packageName == null || "uid:-1".equals(packageName) ? (uid < 0 ? "Unknown" : "") : packageName);
 
         ImageView ivAppIcon = findViewById(R.id.ivAppIcon);
         final String iconPackage = packageName;
@@ -136,7 +142,7 @@ public class AppDetailActivity extends BaseActivity {
         });
 
         TextView tvUid = findViewById(R.id.tvUid);
-        tvUid.setText("UID: " + uid);
+        tvUid.setText(uid < 0 ? "UID: Unknown" : "UID: " + uid);
 
         TextView tvVersion = findViewById(R.id.tvVersion);
         tvVersion.setText(rule != null && rule.version != null ? "v" + rule.version : "");
@@ -155,6 +161,9 @@ public class AppDetailActivity extends BaseActivity {
         }
         ibWifi.setOnClickListener(v -> {
             if (rule == null) {
+                if (AegisUtils.isCloneUid(uid)) {
+                    Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
+                }
                 return;
             }
             rule.wifi_blocked = !rule.wifi_blocked;
@@ -171,6 +180,9 @@ public class AppDetailActivity extends BaseActivity {
         }
         ibOther.setOnClickListener(v -> {
             if (rule == null) {
+                if (AegisUtils.isCloneUid(uid)) {
+                    Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
+                }
                 return;
             }
             rule.other_blocked = !rule.other_blocked;

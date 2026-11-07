@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -57,31 +58,57 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             return;
         }
 
-        int uid = cursor.getInt(cursor.getColumnIndexOrThrow("uid"));
+        int colUid = cursor.getColumnIndexOrThrow("uid");
+        boolean isNullUid = cursor.isNull(colUid);
+        int uid = isNullUid ? -1 : cursor.getInt(colUid);
         String daddr = cursor.getString(cursor.getColumnIndexOrThrow("daddr"));
         String dname = cursor.getString(cursor.getColumnIndexOrThrow("dname"));
         int dport = cursor.getInt(cursor.getColumnIndexOrThrow("dport"));
         long time = cursor.getLong(cursor.getColumnIndexOrThrow("time"));
         int allowed = cursor.getInt(cursor.getColumnIndexOrThrow("allowed"));
 
-        List<String> names = AegisUtils.getApplicationNames(uid, context);
-        String appName = names.isEmpty() ? ("UID:" + uid) : TextUtils.join(", ", names);
-        holder.tvAppName.setText(appName);
-
-        String domain = !TextUtils.isEmpty(dname) ? dname : daddr;
-        if (dport > 0) {
-            domain = domain + ":" + dport;
+        try {
+            String appName;
+            if (isNullUid || uid < 0) {
+                appName = "Unknown app";
+            } else {
+                List<String> names = AegisUtils.getApplicationNames(uid, context);
+                if (!names.isEmpty()) {
+                    appName = TextUtils.join(", ", names);
+                } else if (AegisUtils.isCloneUid(uid)) {
+                    appName = "UID:" + (uid % 100000) + AegisUtils.cloneSuffix(uid, context);
+                } else {
+                    appName = "UID:" + uid;
+                }
+            }
+            holder.tvAppName.setText(appName);
+            holder.ivAppIcon.setImageDrawable(resolveIcon(uid));
+        } catch (Throwable t) {
+            Log.w("AdapterLog", "Failed to resolve name or icon for uid=" + uid, t);
+            holder.tvAppName.setText("UID:" + uid);
+            holder.ivAppIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
         }
-        holder.tvDomain.setText(domain);
 
         holder.tvTimestamp.setText(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(time));
 
-        holder.vDot.setBackground(buildDot(allowed == 1
-                ? ContextCompat.getColor(context, R.color.color_on)
-                : ContextCompat.getColor(context, R.color.color_off)));
+        if (allowed == Packet.STATUS_OVERFLOW) {
+            int count = cursor.getInt(cursor.getColumnIndexOrThrow("connection"));
+            holder.tvDomain.setText(count + " more destinations");
+            holder.vDot.setBackground(buildDot(ContextCompat.getColor(context, R.color.color_label_tertiary)));
+        } else {
+            String domain = !TextUtils.isEmpty(dname) ? dname : daddr;
+            if (dport > 0) {
+                domain = domain + ":" + dport;
+            }
+            holder.tvDomain.setText(domain);
 
-        holder.ivAppIcon.setImageDrawable(resolveIcon(uid));
+            holder.vDot.setBackground(buildDot(allowed == 1
+                    ? ContextCompat.getColor(context, R.color.color_on)
+                    : ContextCompat.getColor(context, R.color.color_off)));
+        }
+
+
     }
 
     @Override
@@ -99,7 +126,7 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
     }
 
     private Drawable resolveIcon(int uid) {
-        String[] packages = packageManager.getPackagesForUid(uid);
+        String[] packages = AegisUtils.packagesForUid(packageManager, uid);
         if (packages != null && packages.length > 0) {
             try {
                 return packageManager.getApplicationIcon(packages[0]);

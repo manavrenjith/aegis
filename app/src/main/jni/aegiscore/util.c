@@ -43,7 +43,7 @@ int sdk_int(JNIEnv *env) {
     return (*env)->GetStaticIntField(env, clsVersion, fid);
 }
 
-void log_android(int prio, const char *fmt, ...) {
+void log_android_impl(int prio, const char *fmt, ...) {
     if (prio >= loglevel) {
         char line[1024];
         va_list argptr;

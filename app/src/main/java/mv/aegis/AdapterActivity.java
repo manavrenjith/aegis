@@ -13,6 +13,8 @@ import android.widget.CursorAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.core.content.ContextCompat;
+
 import com.mv.aegis.R;
 
 import java.util.List;
@@ -47,39 +49,51 @@ public class AdapterActivity extends CursorAdapter {
 
         ivIcon.setImageDrawable(null);
 
-        List<String> names = AegisUtils.getApplicationNames(uid, context);
-        if (names.isEmpty()) {
-            tvName.setText(Integer.toString(uid));
-        } else {
-            tvName.setText(names.get(0));
-        }
-
-        String[] pkgs = null;
         try {
-            pkgs = pm.getPackagesForUid(uid);
-        } catch (SecurityException e) {
-            Log.w("AdapterActivity", "Cannot get packages for uid=" + uid);
-        }
-        String pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
-        tvPackage.setText(pkg != null ? pkg : "uid:" + uid);
-
-        if (pkg != null) {
-            final String iconPackage = pkg;
-            ivIcon.setTag(iconPackage);
-            executor.execute(() -> {
-                try {
-                    ApplicationInfo ai = pm.getApplicationInfo(iconPackage, 0);
-                    final Drawable icon = ai.loadIcon(pm);
-                    view.post(() -> {
-                        Object tag = ivIcon.getTag();
-                        if (tag instanceof String && iconPackage.equals(tag)) {
-                            ivIcon.setImageDrawable(icon);
-                        }
-                    });
-                } catch (Throwable ignored) {
-                    // Ignore missing or inaccessible package icon.
+            List<String> names = AegisUtils.getApplicationNames(uid, context);
+            if (uid < 0) {
+                tvName.setText("Unknown app");
+            } else if (names.isEmpty()) {
+                if (AegisUtils.isCloneUid(uid)) {
+                    int appId = uid % 100000;
+                    tvName.setText("UID:" + appId + AegisUtils.cloneSuffix(uid, context));
+                } else {
+                    tvName.setText(Integer.toString(uid));
                 }
-            });
+            } else {
+                tvName.setText(names.get(0));
+            }
+
+            String[] pkgs = AegisUtils.packagesForUid(pm, uid);
+            String pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
+            tvPackage.setText(pkg != null ? pkg : (uid < 0 ? "Unknown" : "uid:" + uid));
+
+            if (pkg != null) {
+                final String iconPackage = pkg;
+                ivIcon.setTag(iconPackage);
+                executor.execute(() -> {
+                    try {
+                        ApplicationInfo ai = pm.getApplicationInfo(iconPackage, 0);
+                        final Drawable icon = ai.loadIcon(pm);
+                        view.post(() -> {
+                            Object tag = ivIcon.getTag();
+                            if (tag instanceof String && iconPackage.equals(tag)) {
+                                ivIcon.setImageDrawable(icon);
+                            }
+                        });
+                    } catch (Throwable ignored) {
+                        // Ignore missing or inaccessible package icon.
+                    }
+                });
+            } else {
+                ivIcon.setTag(null);
+                ivIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
+            }
+        } catch (Throwable t) {
+            Log.w("AdapterActivity", "Failed to resolve name or icon for uid=" + uid, t);
+            tvName.setText("UID:" + uid);
+            tvPackage.setText(uid < 0 ? "Unknown" : "uid:" + uid);
+            ivIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
         }
 
         tvSent.setText("\u2191 " + AegisUtils.formatBytes(sent));

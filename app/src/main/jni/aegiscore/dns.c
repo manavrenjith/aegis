@@ -1,6 +1,18 @@
 
 #include "aegiscore.h"
 
+static inline uint16_t read_u16_be(const uint8_t *p) {
+    uint16_t val;
+    memcpy(&val, p, sizeof(val));
+    return ntohs(val);
+}
+
+static inline uint32_t read_u32_be(const uint8_t *p) {
+    uint32_t val;
+    memcpy(&val, p, sizeof(val));
+    return ntohl(val);
+}
+
 int32_t get_qname(const uint8_t *data, const size_t datalen, uint16_t off, char *qname) {
     *qname = 0;
 
@@ -88,8 +100,8 @@ void parse_dns_response(const struct arguments *args, const struct ng_session *s
                 // TODO multiple qnames?
                 if (q == 0) {
                     strcpy(qname, name);
-                    qtype = ntohs(*((uint16_t *) (data + off)));
-                    qclass = ntohs(*((uint16_t *) (data + off + 2)));
+                    qtype = read_u16_be(data + off);
+                    qclass = read_u16_be(data + off + 2);
                     log_android(ANDROID_LOG_DEBUG,
                                 "DNS question %d qtype %d qclass %d qname %s",
                                 q, qtype, qclass, qname);
@@ -107,10 +119,10 @@ void parse_dns_response(const struct arguments *args, const struct ng_session *s
         for (int a = 0; a < acount; a++) {
             off = get_qname(data, *datalen, (uint16_t) off, name);
             if (off > 0 && off + 10 <= *datalen) {
-                uint16_t qtype = ntohs(*((uint16_t *) (data + off)));
-                uint16_t qclass = ntohs(*((uint16_t *) (data + off + 2)));
-                uint32_t ttl = ntohl(*((uint32_t *) (data + off + 4)));
-                uint16_t rdlength = ntohs(*((uint16_t *) (data + off + 8)));
+                uint16_t qtype = read_u16_be(data + off);
+                uint16_t qclass = read_u16_be(data + off + 2);
+                uint32_t ttl = read_u32_be(data + off + 4);
+                uint16_t rdlength = read_u16_be(data + off + 8);
                 off += 10;
 
                 if (off + rdlength <= *datalen) {
@@ -205,13 +217,21 @@ void parse_dns_response(const struct arguments *args, const struct ng_session *s
                 }
             }
 
+            int uid = -1;
+            if (s != NULL) {
+                if (s->protocol == IPPROTO_UDP && s->udp.uid >= 0)
+                    uid = s->udp.uid;
+                else if (s->protocol == IPPROTO_TCP && s->tcp.uid >= 0)
+                    uid = s->tcp.uid;
+            }
+
             // Log qname
             char name[DNS_QNAME_MAX + 40 + 1];
             sprintf(name, "qtype %d qname %s rcode %d", qtype, qname, dns->rcode);
             jobject objPacket = create_packet(
                     args, version, s->protocol, "",
                     source, sport, dest, dport,
-                    name, 0, 0);
+                    name, uid, 0);
             log_packet(args, objPacket);
         }
     } else if (acount > 0)

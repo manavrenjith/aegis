@@ -17,6 +17,20 @@ add_library(
     src/main/jni/aegiscore/util.c
 )
 
+target_compile_options(aegiscore PRIVATE
+    -O2
+    -fvisibility=hidden
+    -ffunction-sections
+    -fdata-sections
+    $<$<NOT:$<CONFIG:Debug>>:-DNDEBUG>
+    $<$<NOT:$<CONFIG:Debug>>:-flto>
+)
+
+target_link_options(aegiscore PRIVATE
+    -Wl,--gc-sections
+    $<$<NOT:$<CONFIG:Debug>>:-flto>
+)
+
 find_library(log-lib log)
 
 target_link_libraries(aegiscore ${log-lib})

@@ -317,12 +317,7 @@ public class SpywareScanner {
             return;
         }
         PackageManager pm = ctx.getPackageManager();
-        String[] pkgs = null;
-        try {
-            pkgs = pm.getPackagesForUid(uid);
-        } catch (Throwable ignored) {
-            // fall through
-        }
+        String[] pkgs = AegisUtils.packagesForUid(pm, uid);
         if (pkgs == null || pkgs.length == 0) {
             return;
         }

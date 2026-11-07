@@ -4,11 +4,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.ContentValues;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.database.sqlite.SQLiteDatabase;
+import android.content.pm.LauncherActivityInfo;
+import android.content.pm.LauncherApps;
 import android.net.ConnectivityManager;
 import android.net.VpnService;
 import android.net.VpnService.Builder;
@@ -19,13 +21,31 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
+import android.os.PowerManager;
+import android.os.Process;
+import android.os.SystemClock;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.util.Log;
 import java.net.InetSocketAddress;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.mv.aegis.R;
 
@@ -70,13 +90,88 @@ public class FirewallService extends VpnService {
     private ParcelFileDescriptor tunFd = null;
     private List<FirewallRule> currentRules = null;
     private boolean temporarilyStopped = false;
+    private volatile HandlerThread commandThread;
     private volatile Looper commandLooper;
     private volatile CommandHandler commandHandler;
     private static Object jni_lock = new Object();
     private static long jni_context = 0;
+    private static volatile CountDownLatch activeTeardownLatch = null;
     private Thread tunnelThread = null;
+    private volatile boolean tunnelStillRunning = false;
     private ThreatDetector threatDetector;
     private final ConcurrentHashMap<String, Integer> recentDomainUid = new ConcurrentHashMap<>();
+    private final Set<Integer> seenCloneUids = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Object clonePersistLock = new Object();
+
+    private volatile boolean isInteractive = true;
+    private BroadcastReceiver screenReceiver = null;
+    private volatile boolean destroyed = false;
+
+    private static final class UidDestKey {
+        final int uid;
+        final String dest;
+
+        UidDestKey(int uid, String dest) {
+            this.uid = uid;
+            this.dest = dest != null ? dest : "";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            UidDestKey that = (UidDestKey) o;
+            return uid == that.uid && dest.equals(that.dest);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * uid + dest.hashCode();
+        }
+    }
+
+    private static final class UidOverflow {
+        final int uid;
+        int count = 0;
+        final List<String> sampleDestinations = new ArrayList<>(5);
+        long lastTimestamp = 0;
+        boolean interactive = false;
+
+        UidOverflow(int uid) {
+            this.uid = uid;
+        }
+
+        void addDestination(String dest, long timestamp, boolean isInteractive) {
+            count++;
+            this.lastTimestamp = timestamp;
+            this.interactive = isInteractive;
+            if (sampleDestinations.size() < 5 && dest != null && !dest.isEmpty() && !sampleDestinations.contains(dest)) {
+                sampleDestinations.add(dest);
+            }
+        }
+    }
+
+    private static final int QUEUE_SOFT_CAPACITY = 2000;
+    private static final int QUEUE_HARD_CAPACITY = 10000;
+    private final Object logQueueLock = new Object();
+    private final ArrayDeque<AegisDatabase.LogBatchItem> logQueue = new ArrayDeque<>();
+    private final Map<UidDestKey, AegisDatabase.LogBatchItem> pendingEntries = new HashMap<>();
+    private final LinkedHashMap<UidDestKey, Boolean> seenPairs = new LinkedHashMap<UidDestKey, Boolean>(5000, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<UidDestKey, Boolean> eldest) {
+            return size() > 5000;
+        }
+    };
+    private final Map<Integer, UidOverflow> overflowByUid = new HashMap<>();
+    private final AtomicLong mergedCount = new AtomicLong(0);
+    private final AtomicLong droppedCount = new AtomicLong(0);
+    private final AtomicLong unresolvedUidCount = new AtomicLong(0);
+    private final AtomicLong overflowCount = new AtomicLong(0);
+    private final AtomicLong lostCount = new AtomicLong(0);
+    private volatile long lastStatsWarnTime = 0;
+
+    private Thread logBatchThread = null;
+    private volatile boolean logBatchRunning = false;
 
     private native long jni_init(int sdk);
 
@@ -120,6 +215,10 @@ public class FirewallService extends VpnService {
         }
 
         private void handleIntent(Intent intent) {
+            if (destroyed) {
+                Log.d(TAG, "handleIntent: service is destroyed, skipping");
+                return;
+            }
             Log.d(TAG, "handleIntent command=" + getCommand(intent));
              Command command = getCommand(intent);
              if (command == null) {
@@ -150,7 +249,76 @@ public class FirewallService extends VpnService {
     }
 
     private void start() {
+        if (destroyed) {
+            Log.d(TAG, "start(): service is destroyed, aborting");
+            return;
+        }
+
         Log.d(TAG, "start() BEGIN");
+
+        if (com.mv.aegis.BuildConfig.DEBUG) {
+            try {
+                UserManager um = (UserManager) getSystemService(Context.USER_SERVICE);
+                LauncherApps launcherApps = (LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
+                List<UserHandle> userProfiles = (um != null) ? um.getUserProfiles() : Collections.emptyList();
+                List<UserHandle> launcherProfiles = (launcherApps != null) ? launcherApps.getProfiles() : Collections.emptyList();
+                UserHandle myUser = Process.myUserHandle();
+                Map<UserHandle, List<String>> otherProfilesApps = new HashMap<>();
+                if (launcherApps != null && launcherProfiles != null) {
+                    for (UserHandle profile : launcherProfiles) {
+                        if (!profile.equals(myUser)) {
+                            List<LauncherActivityInfo> acts = launcherApps.getActivityList(null, profile);
+                            List<String> pkgs = new ArrayList<>();
+                            if (acts != null) {
+                                for (LauncherActivityInfo lai : acts) {
+                                    if (lai.getApplicationInfo() != null && lai.getApplicationInfo().packageName != null) {
+                                        pkgs.add(lai.getApplicationInfo().packageName);
+                                    }
+                                }
+                            }
+                            otherProfilesApps.put(profile, pkgs);
+                        }
+                    }
+                }
+                Log.d(TAG, "Debug probe - userProfiles=" + userProfiles
+                        + " launcherProfiles=" + launcherProfiles
+                        + " otherProfilesApps=" + otherProfilesApps);
+            } catch (Throwable t) {
+                Log.e(TAG, "Debug probe failed", t);
+            }
+        }
+
+        CountDownLatch priorTeardown = activeTeardownLatch;
+        if (priorTeardown != null && priorTeardown.getCount() > 0) {
+            Log.d(TAG, "Waiting for prior teardown to complete...");
+            try {
+                if (!priorTeardown.await(6, TimeUnit.SECONDS)) {
+                    Log.w(TAG, "Timed out (6s) waiting for prior teardown to complete");
+                }
+            } catch (InterruptedException e) {
+                Log.w(TAG, "Interrupted while waiting for prior teardown", e);
+            }
+        }
+
+        if (destroyed) {
+            Log.d(TAG, "start(): service was destroyed during latch wait, aborting");
+            return;
+        }
+
+        long localContext;
+        synchronized (jni_lock) {
+            if (jni_context == 0) {
+                Log.d(TAG, "jni_init called in start after waiting for prior teardown");
+                jni_context = jni_init(Build.VERSION.SDK_INT);
+            }
+            localContext = jni_context;
+        }
+
+        if (localContext == 0) {
+            Log.e(TAG, "start(): jni_context is 0, aborting");
+            return;
+        }
+
         currentRules = FirewallRule.getRules(false, this);  // ← add this
         if (vpn == null) {
             stopForeground(true);
@@ -178,8 +346,14 @@ public class FirewallService extends VpnService {
         } catch (Exception e) {
             Log.e(TAG, "Failed to exclude self from VPN", e);
         }
-        Log.d(TAG, "jni_start called, context=" + jni_context);
-        jni_start(jni_context, Log.DEBUG);  // Log.DEBUG = 3 — enables packet logging
+
+        if (destroyed) {
+            Log.d(TAG, "start(): service was destroyed before establish, aborting");
+            return;
+        }
+
+        Log.d(TAG, "jni_start called, context=" + localContext);
+        jni_start(localContext, com.mv.aegis.BuildConfig.DEBUG ? Log.DEBUG : Log.WARN);
 
         if (tunFd != null && tunFd.getFileDescriptor().valid()) {
             try {
@@ -206,46 +380,82 @@ public class FirewallService extends VpnService {
         // Read default policy from SharedPreferences
         // Default allow is the inverse of whitelist mode preference
         SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
-        boolean whitelist_wifi = sp.getBoolean("whitelist_wifi", false);
-        boolean whitelist_other = sp.getBoolean("whitelist_other", false);
-        boolean whitelist_roaming = sp.getBoolean("whitelist_roaming", false);
+        boolean whitelist_wifi = AegisUtils.isWhitelist(sp, "whitelist_wifi");
+        boolean whitelist_other = AegisUtils.isWhitelist(sp, "whitelist_other");
+        boolean whitelist_roaming = AegisUtils.isWhitelist(sp, "whitelist_roaming");
         boolean default_allow_wifi = !whitelist_wifi;
         boolean default_allow_other = !whitelist_other;
         boolean default_allow_roaming = !whitelist_roaming;
         Log.d(TAG, "start() - Setting default policy: wifi=" + default_allow_wifi + " other=" + default_allow_other + " roaming=" + default_allow_roaming);
 
+        if (destroyed) {
+            Log.d(TAG, "start(): service was destroyed before starting tunnel thread, aborting");
+            return;
+        }
 
         if (tunnelThread != null && tunnelThread.isAlive()) {
             return;
         }
 
+        ParcelFileDescriptor threadTunFd = tunFd;
+        if (threadTunFd == null || !threadTunFd.getFileDescriptor().valid()) {
+            Log.w(TAG, "Cannot start tunnel thread: invalid threadTunFd=" + threadTunFd);
+            return;
+        }
+
         tunnelThread = new Thread(() -> {
-            if (tunFd == null || !tunFd.getFileDescriptor().valid()) {
-                Log.w(TAG, "jni_run skipped: tunFd is null or closed");
-                return;
-            }
-            int tun = tunFd.getFd();
+            int tun = threadTunFd.getFd();
             Log.d(TAG, "jni_run called, tun=" + tun);
-            jni_run(jni_context, tun, false, 3);
+            jni_run(localContext, tun, false, 3);
         }, "FirewallTunnel");
         tunnelThread.start();
     }
 
     private void reload(boolean interactive) {
+        if (destroyed) {
+            return;
+        }
         currentRules = FirewallRule.getRules(false, this);
         Log.d(TAG, "reload() - Reloaded firewall rules: " + (currentRules == null ? 0 : currentRules.size()));
 
     }
 
     private void stop(boolean temporary) {
+        if (destroyed) {
+            return;
+        }
+
+        long localContext;
+        synchronized (jni_lock) {
+            localContext = jni_context;
+        }
+        if (localContext == 0) {
+            Log.w(TAG, "stop(): jni_context is 0, skipping jni_stop");
+            return;
+        }
+
         if (vpn != null) {
-            jni_stop(jni_context);
+            jni_stop(localContext);
             try {
                 vpn.close();
             } catch (Exception exception) {
                 Log.w(TAG, "Failed to close VPN", exception);
             }
             vpn = null;
+        }
+
+        if (tunnelThread != null) {
+            try {
+                tunnelThread.join(2000);
+            } catch (InterruptedException ignored) {
+            }
+            if (tunnelThread.isAlive()) {
+                Log.e(TAG, "tunnelThread still alive after join");
+                tunnelStillRunning = true;
+            } else {
+                tunnelThread = null;
+                tunnelStillRunning = false;
+            }
         }
 
         if (state == State.enforcing && !temporary) {
@@ -301,13 +511,17 @@ public class FirewallService extends VpnService {
         startForeground(NOTIFY_WAITING, getWaitingNotification());
 
         synchronized (jni_lock) {
-            Log.d(TAG, "jni_init called");
-            jni_context = jni_init(Build.VERSION.SDK_INT);
+            if (jni_context != 0) {
+                Log.w(TAG, "jni_init in onCreate: existing jni_context is non-zero (" + jni_context + "), not overwriting or freeing");
+            } else {
+                Log.d(TAG, "jni_init called");
+                jni_context = jni_init(Build.VERSION.SDK_INT);
+            }
         }
 
-        HandlerThread handlerThread = new HandlerThread("AegisCommand", android.os.Process.THREAD_PRIORITY_FOREGROUND);
-        handlerThread.start();
-        commandLooper = handlerThread.getLooper();
+        commandThread = new HandlerThread("AegisCommand", android.os.Process.THREAD_PRIORITY_FOREGROUND);
+        commandThread.start();
+        commandLooper = commandThread.getLooper();
         commandHandler = new CommandHandler(commandLooper);
 
         threatDetector = new ThreatDetector(this);
@@ -318,6 +532,41 @@ public class FirewallService extends VpnService {
                 Log.e(TAG, "ThreatDetector load failed", t);
             }
         }, "AegisThreatLoad").start();
+
+        SharedPreferences clonePrefs = getSharedPreferences("clones", Context.MODE_PRIVATE);
+        Set<String> savedClones = clonePrefs.getStringSet("uids", null);
+        if (savedClones != null) {
+            for (String s : savedClones) {
+                try {
+                    seenCloneUids.add(Integer.parseInt(s));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        isInteractive = (pm != null && pm.isInteractive());
+        screenReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null) {
+                    return;
+                }
+                if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                    isInteractive = true;
+                } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                    isInteractive = false;
+                }
+            }
+        };
+        IntentFilter screenFilter = new IntentFilter();
+        screenFilter.addAction(Intent.ACTION_SCREEN_ON);
+        screenFilter.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screenReceiver, screenFilter);
+
+        logBatchRunning = true;
+        logBatchThread = new Thread(this::runLogBatchWorker, "AegisLogBatch");
+        logBatchThread.start();
     }
 
     @Override
@@ -352,28 +601,115 @@ public class FirewallService extends VpnService {
         super.onRevoke();
     }
 
+    private void teardown(
+            HandlerThread cmdThread,
+            CountDownLatch latch
+    ) {
+        boolean commandThreadStillAlive = false;
+        if (cmdThread != null && cmdThread.isAlive()) {
+            try {
+                cmdThread.join(8000);
+            } catch (InterruptedException ignored) {
+            }
+            if (cmdThread.isAlive()) {
+                Log.e(TAG, "commandThread still alive after join timeout in teardown");
+                commandThreadStillAlive = true;
+            }
+        }
+
+        long snapshotContext;
+        synchronized (jni_lock) {
+            snapshotContext = jni_context;
+            jni_context = 0;
+        }
+
+        Thread snapshotTunnelThread = tunnelThread;
+        tunnelThread = null;
+        Thread snapshotLogBatchThread = logBatchThread;
+        logBatchThread = null;
+        ParcelFileDescriptor snapshotVpn = vpn != null ? vpn : tunFd;
+        vpn = null;
+        tunFd = null;
+
+        try {
+            if (snapshotContext != 0) {
+                jni_stop(snapshotContext);
+            }
+
+            boolean tunnelStillAlive = false;
+            if (snapshotTunnelThread != null && snapshotTunnelThread.isAlive()) {
+                try {
+                    snapshotTunnelThread.join(2000);
+                } catch (InterruptedException ignored) {
+                }
+                if (snapshotTunnelThread.isAlive()) {
+                    Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
+                    tunnelStillAlive = true;
+                }
+            }
+
+            if (tunnelStillAlive || (snapshotTunnelThread != null && snapshotTunnelThread.isAlive())) {
+                Log.w(TAG, "tunnel thread is still alive; skipping closing tunFd to prevent fd reuse races");
+            } else if (snapshotVpn != null) {
+                try {
+                    snapshotVpn.close();
+                } catch (Exception exception) {
+                    Log.w(TAG, "Failed to close VPN in teardown", exception);
+                }
+            }
+
+            if (snapshotContext != 0) {
+                if (commandThreadStillAlive || (cmdThread != null && cmdThread.isAlive())) {
+                    Log.w(TAG, "commandThread is still alive; leaking native context " + snapshotContext + " to prevent crash");
+                } else if (tunnelStillAlive || (snapshotTunnelThread != null && snapshotTunnelThread.isAlive())) {
+                    Log.w(TAG, "tunnel thread is still alive; leaking native context " + snapshotContext + " to prevent crash");
+                } else {
+                    jni_done(snapshotContext);
+                }
+            }
+        } finally {
+            if (latch != null) {
+                latch.countDown();
+            }
+        }
+
+        logBatchRunning = false;
+        if (snapshotLogBatchThread != null) {
+            synchronized (logQueueLock) {
+                logQueueLock.notifyAll();
+            }
+            snapshotLogBatchThread.interrupt();
+            try {
+                snapshotLogBatchThread.join(3000);
+            } catch (InterruptedException ignored) {
+            }
+        }
+    }
+
     @Override
     public void onDestroy() {
+        destroyed = true;
+        if (screenReceiver != null) {
+            try {
+                unregisterReceiver(screenReceiver);
+            } catch (Exception ignored) {
+            }
+            screenReceiver = null;
+        }
+
+        CountDownLatch latch = new CountDownLatch(1);
+        activeTeardownLatch = latch;
+
         if (commandLooper != null) {
             commandLooper.quitSafely();
-            commandLooper = null;
         }
 
-        if (vpn != null) {
-            try {
-                vpn.close();
-            } catch (Exception exception) {
-                Log.w(TAG, "Failed to close VPN on destroy", exception);
-            }
-            vpn = null;
-        }
+        HandlerThread snapshotCommandThread = commandThread;
 
-        synchronized (jni_lock) {
-            if (jni_context != 0) {
-                jni_done(jni_context);
-                jni_context = 0;
-            }
-        }
+        new Thread(() -> teardown(
+                snapshotCommandThread,
+                latch
+        ), "FirewallTeardown").start();
 
         super.onDestroy();
     }
@@ -581,13 +917,34 @@ public class FirewallService extends VpnService {
             }
         }
 
+        if (matchedRule == null && AegisUtils.isCloneUid(packet.uid)) {
+            if (seenCloneUids.add(packet.uid)) {
+                new Thread(() -> {
+                    synchronized (clonePersistLock) {
+                        try {
+                            Set<String> snapshot = new HashSet<>();
+                            for (Integer u : seenCloneUids) {
+                                snapshot.add(String.valueOf(u));
+                            }
+                            SharedPreferences sp = getSharedPreferences("clones", Context.MODE_PRIVATE);
+                            sp.edit().putStringSet("uids", snapshot).apply();
+                            Intent changedIntent = new Intent(HomeActivity.ACTION_RULES_CHANGED);
+                            LocalBroadcastManager.getInstance(FirewallService.this).sendBroadcast(changedIntent);
+                        } catch (Throwable t) {
+                            Log.e(TAG, "Failed to persist clone uids", t);
+                        }
+                    }
+                }, "AegisCloneUidPersist").start();
+            }
+        }
+
         boolean blocked;
         if (matchedRule != null) {
             blocked = isWifi ? matchedRule.wifi_blocked : matchedRule.other_blocked;
         } else {
             SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
-            boolean whitelist_wifi = sp.getBoolean("whitelist_wifi", false);
-            boolean whitelist_other = sp.getBoolean("whitelist_other", false);
+            boolean whitelist_wifi = AegisUtils.isWhitelist(sp, "whitelist_wifi");
+            boolean whitelist_other = AegisUtils.isWhitelist(sp, "whitelist_other");
             boolean whitelist = isWifi ? whitelist_wifi : whitelist_other;
             blocked = whitelist;
         }
@@ -641,7 +998,7 @@ public class FirewallService extends VpnService {
             packet.allowed = !blocked;
 
             AegisDatabase.getInstance(this)
-                    .insertThreatLog(packet, domain, threatType, 0, AegisUtils.isInteractive(this));
+                    .insertThreatLog(packet, domain, threatType, 0, isInteractive);
 
             fireThreatNotification(domain, threatType, blocked, detail);
         } catch (Throwable t) {
@@ -678,11 +1035,235 @@ public class FirewallService extends VpnService {
         }
     }
 
+    private static UidDestKey getBatchItemKey(AegisDatabase.LogBatchItem item) {
+        if (item.packet != null) {
+            return new UidDestKey(item.packet.uid, item.packet.daddr != null ? item.packet.daddr : "");
+        }
+        if (item.usage != null) {
+            return new UidDestKey(item.usage.Uid, item.usage.DAddr != null ? item.usage.DAddr : "");
+        }
+        if (item.rr != null) {
+            String d = item.rr.QName != null ? item.rr.QName : (item.rr.Resource != null ? item.rr.Resource : "");
+            return new UidDestKey(item.rr.uid, d);
+        }
+        return new UidDestKey(-1, "");
+    }
+
+    private static int getBatchItemUid(AegisDatabase.LogBatchItem item) {
+        if (item.packet != null) return item.packet.uid;
+        if (item.usage != null) return item.usage.Uid;
+        if (item.rr != null) return item.rr.uid;
+        return -1;
+    }
+
+    private void checkLogStatsWarning() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastStatsWarnTime >= 60000L) {
+            long merged = mergedCount.get();
+            long dropped = droppedCount.get();
+            long unresolved = unresolvedUidCount.get();
+            long overflow = overflowCount.get();
+            long lost = lostCount.get();
+            if (merged > 0 || dropped > 0 || unresolved > 0 || overflow > 0 || lost > 0) {
+                Log.w(TAG, "Log queue stats: merged=" + merged + ", dropped=" + dropped + ", unresolved_uid=" + unresolved + ", overflow=" + overflow + ", lost=" + lost);
+                lastStatsWarnTime = now;
+            }
+        }
+    }
+
+    private boolean isLogQueueEmpty() {
+        synchronized (logQueueLock) {
+            return logQueue.isEmpty() && overflowByUid.isEmpty();
+        }
+    }
+
+    private void enqueueLogItem(AegisDatabase.LogBatchItem item) {
+        if (item == null) {
+            return;
+        }
+
+        // Capture timestamp and screen state at enqueue time
+        long now = System.currentTimeMillis();
+        boolean interactive = isInteractive;
+        item.timestamp = now;
+        item.interactive = interactive;
+        if (item.packet != null) {
+            item.packet.time = now;
+        }
+        if (item.usage != null) {
+            item.usage.Time = now;
+        }
+        if (item.rr != null) {
+            item.rr.Time = now;
+        }
+
+        if (item.rr == null) {
+            int uid = getBatchItemUid(item);
+            if (uid < 0) {
+                unresolvedUidCount.incrementAndGet();
+            }
+        }
+
+        UidDestKey key = getBatchItemKey(item);
+
+        synchronized (logQueueLock) {
+            boolean wasEmpty = logQueue.isEmpty();
+            boolean isUsageOrDns = (item.usage != null || item.rr != null);
+
+            if (isUsageOrDns) {
+                // Usage and DNS items are never dropped or overflowed: only added to the queue
+                logQueue.add(item);
+                if (wasEmpty || logQueue.size() == 100) {
+                    logQueueLock.notify();
+                }
+                return;
+            }
+
+            int queueSize = logQueue.size();
+            if (queueSize < QUEUE_SOFT_CAPACITY) {
+                seenPairs.put(key, Boolean.TRUE);
+                logQueue.add(item);
+                pendingEntries.put(key, item);
+                if (wasEmpty || logQueue.size() == 100) {
+                    logQueueLock.notify();
+                }
+            } else if (queueSize < QUEUE_HARD_CAPACITY) {
+                if (!seenPairs.containsKey(key)) {
+                    // Queue full, but pair not seen: must still be enqueued (exceeds soft limit)
+                    seenPairs.put(key, Boolean.TRUE);
+                    logQueue.add(item);
+                    pendingEntries.put(key, item);
+                    if (wasEmpty || logQueue.size() == 100) {
+                        logQueueLock.notify();
+                    }
+                } else {
+                    // Already-seen pair: merge into pending entry if one exists, else drop
+                    AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
+                    if (pending != null) {
+                        pending.merge(item);
+                        mergedCount.incrementAndGet();
+                    } else {
+                        droppedCount.incrementAndGet();
+                    }
+                }
+            } else {
+                // At hard cap (queueSize >= QUEUE_HARD_CAPACITY)
+                if (seenPairs.containsKey(key)) {
+                    // Already-seen pair: merge into pending entry if exists, else drop
+                    AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
+                    if (pending != null) {
+                        pending.merge(item);
+                        mergedCount.incrementAndGet();
+                    } else {
+                        droppedCount.incrementAndGet();
+                    }
+                } else {
+                    // New (uid, destination) pair at hard cap: update per-uid overflow aggregation
+                    int itemUid = item.packet != null ? item.packet.uid : -1;
+                    String dest = item.packet != null && item.packet.daddr != null ? item.packet.daddr : "";
+                    UidOverflow overflow = overflowByUid.get(itemUid);
+                    if (overflow == null) {
+                        overflow = new UidOverflow(itemUid);
+                        overflowByUid.put(itemUid, overflow);
+                    }
+                    overflow.addDestination(dest, now, interactive);
+                    overflowCount.incrementAndGet();
+                }
+            }
+        }
+    }
+
+    private void runLogBatchWorker() {
+        List<AegisDatabase.LogBatchItem> batch = new ArrayList<>(100);
+        while (logBatchRunning || !isLogQueueEmpty()) {
+            synchronized (logQueueLock) {
+                while (logQueue.isEmpty() && overflowByUid.isEmpty() && logBatchRunning) {
+                    try {
+                        logQueueLock.wait();
+                    } catch (InterruptedException e) {
+                        // Interrupted on shutdown
+                    }
+                }
+                if (logQueue.isEmpty() && overflowByUid.isEmpty()) {
+                    break;
+                }
+
+                long firstItemTime = SystemClock.elapsedRealtime();
+                while (logBatchRunning && logQueue.size() < 100 && overflowByUid.isEmpty()) {
+                    long elapsed = SystemClock.elapsedRealtime() - firstItemTime;
+                    if (elapsed >= 250L) {
+                        break;
+                    }
+                    try {
+                        logQueueLock.wait(250L - elapsed);
+                    } catch (InterruptedException e) {
+                        // Interrupted on shutdown
+                        break;
+                    }
+                }
+
+                for (int i = 0; i < 100 && !logQueue.isEmpty(); i++) {
+                    AegisDatabase.LogBatchItem item = logQueue.poll();
+                    if (item != null) {
+                        batch.add(item);
+                        UidDestKey key = getBatchItemKey(item);
+                        if (pendingEntries.get(key) == item) {
+                            pendingEntries.remove(key);
+                        }
+                    }
+                }
+
+                if (!overflowByUid.isEmpty() && batch.size() < 100) {
+                    for (Iterator<Map.Entry<Integer, UidOverflow>> it = overflowByUid.entrySet().iterator(); it.hasNext(); ) {
+                        if (batch.size() >= 100) {
+                            break;
+                        }
+                        UidOverflow of = it.next().getValue();
+                        it.remove();
+                        Packet op = new Packet();
+                        op.uid = of.uid;
+                        op.time = of.lastTimestamp;
+                        op.version = 0;
+                        op.protocol = 0;
+                        op.saddr = "";
+                        op.sport = 0;
+                        op.daddr = "";
+                        op.dport = 0;
+                        op.flags = "OVERFLOW";
+                        op.data = of.count + " more destinations [" + String.join(", ", of.sampleDestinations) + "]";
+                        op.allowed = false;
+                        op.setStatus(Packet.STATUS_OVERFLOW);
+                        batch.add(new AegisDatabase.LogBatchItem(op, null, of.count, of.interactive));
+                    }
+                }
+            }
+
+            if (!batch.isEmpty()) {
+                try {
+                    AegisDatabase.getInstance(this).insertBatch(batch);
+                } catch (Throwable firstAttempt) {
+                    Log.w(TAG, "insertBatch failed, retrying once", firstAttempt);
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ignored) {
+                    }
+                    try {
+                        AegisDatabase.getInstance(this).insertBatch(batch);
+                    } catch (Throwable secondAttempt) {
+                        Log.e(TAG, "insertBatch retry failed, items lost", secondAttempt);
+                        lostCount.addAndGet(batch.size());
+                    }
+                }
+                batch.clear();
+            }
+
+            checkLogStatsWarning();
+        }
+    }
+
     public void logPacket(Packet packet) {
         if (packet == null) return;
-        Log.d(TAG, "logPacket uid=" + packet.uid + " daddr=" + packet.daddr);
-        AegisDatabase.getInstance(this)
-                .insertLog(packet, null, 0, AegisUtils.isInteractive(this));
+        enqueueLogItem(new AegisDatabase.LogBatchItem(packet, null, 0, isInteractive));
     }
 
     public void dnsResolved(ResourceRecord rr) {
@@ -690,16 +1271,7 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        ContentValues cv = new ContentValues();
-        cv.put("time", rr.Time);
-        cv.put("qname", rr.QName);
-        cv.put("aname", rr.AName);
-        cv.put("resource", rr.Resource);
-        cv.put("ttl", rr.TTL);
-        cv.put("uid", rr.uid);
-
-        SQLiteDatabase db = AegisDatabase.getInstance(this).getWritableDatabase();
-        db.insertWithOnConflict("dns", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+        enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
 
         // Best-effort domain -> uid attribution for threat logging (Feature 1/4).
         // uid is real in the TLS SNI path (ip.c) and -1 in the DNS-answer path (dns.c).
@@ -719,7 +1291,7 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        AegisDatabase.getInstance(this).updateUsage(usage, null);
+        enqueueLogItem(new AegisDatabase.LogBatchItem(usage, null));
     }
 
     public void nativeExit(String reason) {

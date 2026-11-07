@@ -17,9 +17,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class FirewallRule {
 
@@ -166,6 +169,24 @@ public class FirewallRule {
 			internet = true;
 			enabled = true;
 			pkg = false;
+		} else if (this.packageName != null && this.packageName.startsWith("clone:")) {
+			name = (info.applicationInfo != null && info.applicationInfo.nonLocalizedLabel != null)
+					? info.applicationInfo.nonLocalizedLabel.toString()
+					: ("UID:" + uid);
+			system = false;
+			boolean hasNet = true;
+			if (info.requestedPermissions != null) {
+				hasNet = false;
+				for (String perm : info.requestedPermissions) {
+					if ("android.permission.INTERNET".equals(perm)) {
+						hasNet = true;
+						break;
+					}
+				}
+			}
+			internet = hasNet;
+			enabled = true;
+			pkg = true;
 		} else {
 			Cursor cursor = null;
 			try {
@@ -203,11 +224,11 @@ public class FirewallRule {
 			SharedPreferences apply = appContext.getSharedPreferences("apply", Context.MODE_PRIVATE);
 			SharedPreferences notify = appContext.getSharedPreferences("notify", Context.MODE_PRIVATE);
 
-			boolean defaultWifi = prefs.getBoolean("whitelist_wifi", true);
-			boolean defaultOther = prefs.getBoolean("whitelist_other", true);
+			boolean defaultWifi = AegisUtils.isWhitelist(prefs, "whitelist_wifi");
+			boolean defaultOther = AegisUtils.isWhitelist(prefs, "whitelist_other");
 			boolean defaultScreenWifi = prefs.getBoolean("screen_wifi", false);
 			boolean defaultScreenOther = prefs.getBoolean("screen_other", false);
-			boolean defaultRoaming = prefs.getBoolean("whitelist_roaming", true);
+			boolean defaultRoaming = AegisUtils.isWhitelist(prefs, "whitelist_roaming");
 			boolean manageSystem = prefs.getBoolean("manage_system", false);
 			boolean screenOn = prefs.getBoolean("screen_on", true);
 			boolean showUser = prefs.getBoolean("show_user", true);
@@ -276,6 +297,56 @@ public class FirewallRule {
 			nobody.versionName = Build.VERSION.RELEASE;
 			nobody.applicationInfo.icon = 0;
 			listPI.add(nobody);
+
+			SharedPreferences clonePrefs = appContext.getSharedPreferences("clones", Context.MODE_PRIVATE);
+			Set<String> cloneUids = clonePrefs.getStringSet("uids", Collections.emptySet());
+			List<PackageInfo> listClones = new ArrayList<>();
+			if (cloneUids != null) {
+				for (String uidStr : cloneUids) {
+					try {
+						int cloneUid = Integer.parseInt(uidStr);
+						if (!AegisUtils.isCloneUid(cloneUid)) {
+							continue;
+						}
+						int appId = cloneUid % 100000;
+						int userN = cloneUid / 100000;
+
+						PackageInfo basePi = null;
+						for (PackageInfo pi : listPI) {
+							if (pi.applicationInfo != null && pi.applicationInfo.uid == appId) {
+								basePi = pi;
+								break;
+							}
+						}
+
+						PackageInfo clonePi = new PackageInfo();
+						clonePi.packageName = "clone:" + cloneUid;
+						clonePi.applicationInfo = new ApplicationInfo();
+						clonePi.applicationInfo.uid = cloneUid;
+
+						String baseLabel = null;
+						if (basePi != null) {
+							clonePi.versionName = basePi.versionName;
+							clonePi.versionCode = basePi.versionCode;
+							clonePi.requestedPermissions = basePi.requestedPermissions;
+							if (basePi.applicationInfo != null) {
+								clonePi.applicationInfo.icon = basePi.applicationInfo.icon;
+								baseLabel = getLabel(basePi, appContext);
+							}
+						}
+						if (baseLabel == null) {
+							baseLabel = "UID:" + appId;
+						}
+
+						String cloneLabel = baseLabel + AegisUtils.cloneSuffix(cloneUid, appContext);
+						clonePi.applicationInfo.nonLocalizedLabel = cloneLabel;
+						listClones.add(clonePi);
+					} catch (Throwable ex) {
+						Log.e("Aegis.Rule", "Error processing clone uid " + uidStr + ": " + ex.getMessage(), ex);
+					}
+				}
+			}
+			listPI.addAll(listClones);
 
 			List<FirewallRule> listRules = new ArrayList<>();
 
@@ -354,6 +425,50 @@ public class FirewallRule {
 				});
 			}
 
+			List<FirewallRule> nonCloneRules = new ArrayList<>();
+			List<FirewallRule> cloneRules = new ArrayList<>();
+			for (FirewallRule r : listRules) {
+				if (r.packageName != null && r.packageName.startsWith("clone:")) {
+					cloneRules.add(r);
+				} else {
+					nonCloneRules.add(r);
+				}
+			}
+
+			if (!cloneRules.isEmpty()) {
+				Map<Integer, List<FirewallRule>> clonesByBaseUid = new LinkedHashMap<>();
+				List<FirewallRule> orphanClones = new ArrayList<>();
+				Set<Integer> presentBaseUids = new HashSet<>();
+				for (FirewallRule r : nonCloneRules) {
+					presentBaseUids.add(r.uid);
+				}
+
+				for (FirewallRule cr : cloneRules) {
+					int baseUid = cr.uid % 100000;
+					if (presentBaseUids.contains(baseUid)) {
+						List<FirewallRule> list = clonesByBaseUid.get(baseUid);
+						if (list == null) {
+							list = new ArrayList<>();
+							clonesByBaseUid.put(baseUid, list);
+						}
+						list.add(cr);
+					} else {
+						orphanClones.add(cr);
+					}
+				}
+
+				listRules.clear();
+				for (FirewallRule r : nonCloneRules) {
+					listRules.add(r);
+					List<FirewallRule> matchedClones = clonesByBaseUid.get(r.uid);
+					if (matchedClones != null) {
+						listRules.addAll(matchedClones);
+						clonesByBaseUid.remove(r.uid);
+					}
+				}
+				listRules.addAll(orphanClones);
+			}
+
 			Log.d("Aegis.Rule", "getRules returning " + listRules.size() + " rules, all=" + all);
 			Log.d("Aegis.Rule", "Default policy - WiFi: allow=" + defaultWifi + ", Other: allow=" + defaultOther + ", Roaming: allow=" + defaultRoaming);
 			for (FirewallRule rule : listRules) {
@@ -415,9 +530,9 @@ public class FirewallRule {
 	public void updateChanged(Context context) {
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
 		boolean screenOn = prefs.getBoolean("screen_on", true);
-		boolean defaultWifi = prefs.getBoolean("whitelist_wifi", true);
-		boolean defaultOther = prefs.getBoolean("whitelist_other", true);
-		boolean defaultRoaming = prefs.getBoolean("whitelist_roaming", true);
+		boolean defaultWifi = AegisUtils.isWhitelist(prefs, "whitelist_wifi");
+		boolean defaultOther = AegisUtils.isWhitelist(prefs, "whitelist_other");
+		boolean defaultRoaming = AegisUtils.isWhitelist(prefs, "whitelist_roaming");
 
 		screen_wifi_default = prefs.getBoolean("screen_wifi", false) && screenOn;
 		screen_other_default = prefs.getBoolean("screen_other", false) && screenOn;

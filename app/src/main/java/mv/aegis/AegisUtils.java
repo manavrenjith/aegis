@@ -26,15 +26,25 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.TreeSet;
 
 public final class AegisUtils {
 
     private static final String TAG = "Aegis.Utils";
 
+    public static final boolean WHITELIST_DEFAULT = false;
+
+    public static boolean isWhitelist(SharedPreferences sp, String key) {
+        return sp.getBoolean(key, WHITELIST_DEFAULT);
+    }
+
     private AegisUtils() {
     }
 
     public static boolean isSystem(String packageName, Context context) {
+        if (packageName != null && packageName.startsWith("clone:")) {
+            return false;
+        }
         try {
             PackageManager pm = context.getPackageManager();
             PackageInfo info = pm.getPackageInfo(packageName, 0);
@@ -47,7 +57,7 @@ public final class AegisUtils {
 
     public static boolean isSystem(int uid, Context context) {
         PackageManager pm = context.getPackageManager();
-        String[] packages = pm.getPackagesForUid(uid);
+        String[] packages = packagesForUid(pm, uid);
         if (packages != null) {
             for (String pkg : packages) {
                 if (isSystem(pkg, context)) {
@@ -58,7 +68,73 @@ public final class AegisUtils {
         return false;
     }
 
+    public static boolean isCloneUid(int uid) {
+        if (uid < 100000) {
+            return false;
+        }
+        int appId = uid % 100000;
+        return appId >= 10000 && appId <= 19999;
+    }
+
+    public static String[] packagesForUid(PackageManager pm, int uid) {
+        if (pm == null || uid < 0) {
+            return null;
+        }
+        int lookupUid = isCloneUid(uid) ? (uid % 100000) : uid;
+        try {
+            return pm.getPackagesForUid(lookupUid);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    public static String cloneSuffix(int uid, Context context) {
+        if (!isCloneUid(uid) || context == null) {
+            return "";
+        }
+        int targetUser = uid / 100000;
+        TreeSet<Integer> userIds = new TreeSet<>();
+        SharedPreferences clonePrefs = context.getApplicationContext()
+                .getSharedPreferences("clones", Context.MODE_PRIVATE);
+        Set<String> uids = clonePrefs.getStringSet("uids", Collections.emptySet());
+        if (uids != null) {
+            for (String s : uids) {
+                try {
+                    int u = Integer.parseInt(s);
+                    if (isCloneUid(u)) {
+                        userIds.add(u / 100000);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        userIds.add(targetUser);
+
+        int rank = 0;
+        for (Integer userId : userIds) {
+            if (userId == targetUser) {
+                break;
+            }
+            rank++;
+        }
+
+        if (rank == 0) {
+            return " (clone)";
+        } else {
+            return " (clone " + (rank + 1) + ")";
+        }
+    }
+
     public static boolean hasInternet(String packageName, Context context) {
+        if (packageName != null && packageName.startsWith("clone:")) {
+            try {
+                int uid = Integer.parseInt(packageName.substring(6));
+                if (isCloneUid(uid)) {
+                    return hasInternet(uid % 100000, context);
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
         PackageManager pm = context.getPackageManager();
         return (pm.checkPermission("android.permission.INTERNET", packageName)
                 == PackageManager.PERMISSION_GRANTED);
@@ -66,7 +142,7 @@ public final class AegisUtils {
 
     public static boolean hasInternet(int uid, Context context) {
         PackageManager pm = context.getPackageManager();
-        String[] packages = pm.getPackagesForUid(uid);
+        String[] packages = packagesForUid(pm, uid);
         if (packages != null) {
             for (String pkg : packages) {
                 if (hasInternet(pkg, context)) {
@@ -164,9 +240,22 @@ public final class AegisUtils {
             return names;
         }
 
+        if (isCloneUid(uid)) {
+            int appId = uid % 100000;
+            String suffix = cloneSuffix(uid, context);
+            List<String> baseNames = getApplicationNames(appId, context);
+            for (String baseName : baseNames) {
+                names.add(baseName + suffix);
+            }
+            if (!names.isEmpty()) {
+                Collections.sort(names);
+                return names;
+            }
+        }
+
         PackageManager pm = context.getPackageManager();
         try {
-            String[] packages = pm.getPackagesForUid(uid);
+            String[] packages = packagesForUid(pm, uid);
             if (packages != null) {
                 for (String pkg : packages) {
                     ApplicationInfo info = pm.getApplicationInfo(pkg, 0);

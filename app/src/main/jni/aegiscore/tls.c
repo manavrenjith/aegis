@@ -30,26 +30,28 @@ int get_sni(
     log_android(ANDROID_LOG_DEBUG, "TLS client hello version %d.%d",
                 major_version, minor_version);
 
-    uint8_t index = 6 + // header above
-                    3 + // client hello length
-                    2 + // client hello protocol version
-                    32; // random value
+    size_t index = 6 + // header above
+                   3 + // client hello length
+                   2 + // client hello protocol version
+                   32; // random value
 
     // Session ID
     if (index >= datalen) {
-        log_android(ANDROID_LOG_WARN, "TLS session ID %d/%d", index, datalen);
+        log_android(ANDROID_LOG_WARN, "TLS session ID %zu/%u", index, datalen);
         return 0;
     }
 
-    log_android(ANDROID_LOG_DEBUG, "TLS hello version %d.%d",
-                data[9], data[10]);
+    if (datalen > 10) {
+        log_android(ANDROID_LOG_DEBUG, "TLS hello version %d.%d",
+                    data[9], data[10]);
+    }
 
     uint8_t session_len = data[index];
     index += 1 + session_len;
 
     // Cipher suites
-    if (index + 1 >= datalen) {
-        log_android(ANDROID_LOG_WARN, "TLS cipher suites %d/%d", index + 1, datalen);
+    if (index + 2 > datalen) {
+        log_android(ANDROID_LOG_WARN, "TLS cipher suites %zu/%u", index + 2, datalen);
         return 0;
     }
     uint16_t suites_len = ((uint16_t) data[index] << 8) | data[index + 1];
@@ -57,68 +59,67 @@ int get_sni(
 
     // Compression method
     if (index >= datalen) {
-        log_android(ANDROID_LOG_WARN, "TLS compression %d/%d", index, datalen);
+        log_android(ANDROID_LOG_WARN, "TLS compression %zu/%u", index, datalen);
         return 0;
     }
     uint8_t compression_len = data[index];
     index += 1 + compression_len;
 
     // Extensions length
-    if (index + 1 >= datalen) {
-        log_android(ANDROID_LOG_WARN, "TLS extensions %d/%d", index + 1, datalen);
+    if (index + 2 > datalen) {
+        log_android(ANDROID_LOG_WARN, "TLS extensions %zu/%u", index + 2, datalen);
         return 0;
     }
     uint16_t edatalen = ((uint16_t) data[index] << 8) | data[index + 1];
     index += 2;
 
     if (edatalen == 0 || index + edatalen != datalen) {
-        log_android(ANDROID_LOG_WARN, "TLS extensions(2) len=%d %d/%d",
+        log_android(ANDROID_LOG_WARN, "TLS extensions(2) len=%u %zu/%u",
                     edatalen, index + edatalen, datalen);
         return 0;
     }
 
-    uint16_t eindex = 0;
+    size_t eindex = 0;
     const uint8_t *edata = data + index;
     while (eindex < edatalen) {
-        if (eindex + 1 >= edatalen) {
-            log_android(ANDROID_LOG_WARN, "TLS ext_type %d/%d", eindex + 1, edatalen);
+        if (eindex + 2 > edatalen) {
+            log_android(ANDROID_LOG_WARN, "TLS ext_type %zu/%u", eindex + 2, edatalen);
             return 0;
         }
         uint16_t ext_type = ((uint16_t) edata[eindex] << 8) | edata[eindex + 1];
         eindex += 2;
         log_android(ANDROID_LOG_DEBUG, "TLS ext_type=%d", ext_type);
 
-        if (eindex + 1 >= edatalen) {
-            log_android(ANDROID_LOG_WARN, "TLS ext_len %d/%d", eindex + 1, edatalen);
+        if (eindex + 2 > edatalen) {
+            log_android(ANDROID_LOG_WARN, "TLS ext_len %zu/%u", eindex + 2, edatalen);
             return 0;
         }
         uint16_t ext_len = ((uint16_t) edata[eindex] << 8) | edata[eindex + 1];
         eindex += 2;
 
         if (eindex + ext_len > edatalen) {
-            log_android(ANDROID_LOG_WARN, "TLS ext_len(2) %d/%d", eindex + ext_len, edatalen);
+            log_android(ANDROID_LOG_WARN, "TLS ext_len(2) %zu/%u", eindex + ext_len, edatalen);
             return 0;
         }
 
         // https://datatracker.ietf.org/doc/html/rfc6066
         if (ext_type == TLS_EXTENSION_TYPE_SERVER_NAME) {
-            if (eindex + 1 >= edatalen) {
-                log_android(ANDROID_LOG_WARN, "TLS sni_len %d/%d", eindex + 1, edatalen);
+            if (eindex + 2 > edatalen) {
+                log_android(ANDROID_LOG_WARN, "TLS sni_len %zu/%u", eindex + 2, edatalen);
                 return 0;
             }
             uint16_t sni_len = ((uint16_t) edata[eindex] << 8) | edata[eindex + 1];
             eindex += 2;
             log_android(ANDROID_LOG_DEBUG, "TLS sni_len=%d", sni_len);
 
-
-            if (eindex + sni_len >= edatalen) {
-                log_android(ANDROID_LOG_WARN, "TLS sni_len(2) len=%d %d/%d",
+            if (eindex + sni_len > edatalen) {
+                log_android(ANDROID_LOG_WARN, "TLS sni_len(2) len=%u %zu/%u",
                             sni_len, eindex + sni_len, edatalen);
                 return 0;
             }
 
             if (eindex >= edatalen) {
-                log_android(ANDROID_LOG_WARN, "TLS sni_type %d/%d", eindex, edatalen);
+                log_android(ANDROID_LOG_WARN, "TLS sni_type %zu/%u", eindex, edatalen);
                 return 0;
             }
             uint8_t sni_type = edata[eindex++];
@@ -127,20 +128,20 @@ int get_sni(
                 return 0;
             }
 
-            if (eindex + 1 >= edatalen) {
-                log_android(ANDROID_LOG_WARN, "TLS name_len %d/%d", eindex + 1, edatalen);
+            if (eindex + 2 > edatalen) {
+                log_android(ANDROID_LOG_WARN, "TLS name_len %zu/%u", eindex + 2, edatalen);
                 return 0;
             }
             uint16_t name_len = ((uint16_t) edata[eindex] << 8) | edata[eindex + 1];
             eindex += 2;
 
-            if (eindex + name_len >= edatalen) {
-                log_android(ANDROID_LOG_WARN, "TLS name_len(2) len=%d %d/%d",
+            if (eindex + name_len > edatalen) {
+                log_android(ANDROID_LOG_WARN, "TLS name_len(2) len=%u %zu/%u",
                             name_len, eindex + name_len, edatalen);
                 return 0;
             }
             if (name_len >= TLS_SNI_LENGTH) {
-                log_android(ANDROID_LOG_WARN, "TLS name_len(3) %d/%d",
+                log_android(ANDROID_LOG_WARN, "TLS name_len(3) %u/%d",
                             name_len, TLS_SNI_LENGTH);
                 return 0;
             }

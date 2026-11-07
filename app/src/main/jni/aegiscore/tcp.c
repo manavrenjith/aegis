@@ -602,6 +602,26 @@ void check_tcp_socket(const struct arguments *args,
         log_android(ANDROID_LOG_DEBUG, "%s new state", session);
 }
 
+struct ng_session *get_tcp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload) {
+    const uint8_t version = (*pkt) >> 4;
+    const struct iphdr *ip4 = (struct iphdr *) pkt;
+    const struct ip6_hdr *ip6 = (struct ip6_hdr *) pkt;
+    const struct tcphdr *tcphdr = (struct tcphdr *) payload;
+
+    struct ng_session *cur = args->ctx->ng_session;
+    while (cur != NULL &&
+           !(cur->protocol == IPPROTO_TCP &&
+             cur->tcp.version == version &&
+             cur->tcp.source == tcphdr->source && cur->tcp.dest == tcphdr->dest &&
+             (version == 4 ? cur->tcp.saddr.ip4 == ip4->saddr &&
+                             cur->tcp.daddr.ip4 == ip4->daddr
+                           : memcmp(&cur->tcp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
+                             memcmp(&cur->tcp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
+        cur = cur->next;
+
+    return cur;
+}
+
 jboolean handle_tcp(const struct arguments *args,
                     const uint8_t *pkt, size_t length,
                     const uint8_t *payload,
@@ -618,16 +638,7 @@ jboolean handle_tcp(const struct arguments *args,
     const uint16_t datalen = (const uint16_t) (length - (data - pkt));
 
     // Search session
-    struct ng_session *cur = args->ctx->ng_session;
-    while (cur != NULL &&
-           !(cur->protocol == IPPROTO_TCP &&
-             cur->tcp.version == version &&
-             cur->tcp.source == tcphdr->source && cur->tcp.dest == tcphdr->dest &&
-             (version == 4 ? cur->tcp.saddr.ip4 == ip4->saddr &&
-                             cur->tcp.daddr.ip4 == ip4->daddr
-                           : memcmp(&cur->tcp.saddr.ip6, &ip6->ip6_src, 16) == 0 &&
-                             memcmp(&cur->tcp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
-        cur = cur->next;
+    struct ng_session *cur = get_tcp_session(args, pkt, payload);
 
     // Prepare logging
     char source[INET6_ADDRSTRLEN + 1];

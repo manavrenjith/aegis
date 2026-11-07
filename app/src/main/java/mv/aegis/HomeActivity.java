@@ -20,6 +20,7 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SearchView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -60,7 +61,7 @@ public class HomeActivity extends BaseActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (ACTION_RULES_CHANGED.equals(intent.getAction())) {
-                updateApplicationList(null);
+                updateApplicationList(getCurrentSearchText());
             }
         }
     };
@@ -162,9 +163,33 @@ public class HomeActivity extends BaseActivity {
         TextView tvNotifications = findViewById(R.id.tvNotifications);
         tvNotifications.setVisibility(View.GONE);
 
+        {
+            View v = findViewById(R.id.searchView);
+            if (v instanceof SearchView) {
+                SearchView searchView = (SearchView) v;
+                searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+                    @Override
+                    public boolean onQueryTextSubmit(String query) {
+                        if (adapter != null) {
+                            adapter.getFilter().filter(query);
+                        }
+                        return false;
+                    }
+
+                    @Override
+                    public boolean onQueryTextChange(String newText) {
+                        if (adapter != null) {
+                            adapter.getFilter().filter(newText);
+                        }
+                        return true;
+                    }
+                });
+            }
+        }
+
         swipeRefresh = findViewById(R.id.swipeRefresh);
         swipeRefresh.setOnRefreshListener(() -> {
-            updateApplicationList(null);
+            updateApplicationList(getCurrentSearchText());
             swipeRefresh.setRefreshing(false);
         });
 
@@ -431,11 +456,24 @@ public class HomeActivity extends BaseActivity {
         }
     }
 
+    private String getCurrentSearchText() {
+        View v = findViewById(R.id.searchView);
+        if (v instanceof SearchView) {
+            SearchView searchView = (SearchView) v;
+            CharSequence query = searchView.getQuery();
+            if (query != null && query.length() > 0) {
+                return query.toString();
+            }
+        }
+        return null;
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         LocalBroadcastManager.getInstance(this)
                 .registerReceiver(onRulesChanged, new IntentFilter(ACTION_RULES_CHANGED));
+        updateApplicationList(getCurrentSearchText());
         updateStatCards();
         updateThreatCard();
     }
