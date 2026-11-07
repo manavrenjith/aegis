@@ -45,6 +45,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.mv.aegis.R;
 
@@ -927,6 +928,8 @@ public class FirewallService extends VpnService {
                             }
                             SharedPreferences sp = getSharedPreferences("clones", Context.MODE_PRIVATE);
                             sp.edit().putStringSet("uids", snapshot).apply();
+                            Intent changedIntent = new Intent(HomeActivity.ACTION_RULES_CHANGED);
+                            LocalBroadcastManager.getInstance(FirewallService.this).sendBroadcast(changedIntent);
                         } catch (Throwable t) {
                             Log.e(TAG, "Failed to persist clone uids", t);
                         }
