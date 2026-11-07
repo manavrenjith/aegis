@@ -303,7 +303,7 @@ public class FirewallRule {
 				for (String uidStr : cloneUids) {
 					try {
 						int cloneUid = Integer.parseInt(uidStr);
-						if (cloneUid < 100000 || (cloneUid % 100000) < 10000) {
+						if (!AegisUtils.isCloneUid(cloneUid)) {
 							continue;
 						}
 						int appId = cloneUid % 100000;

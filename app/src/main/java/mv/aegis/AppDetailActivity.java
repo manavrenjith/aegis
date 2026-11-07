@@ -108,7 +108,7 @@ public class AppDetailActivity extends BaseActivity {
                 handler.post(() -> {
                     rule = finalFoundRule;
                     bindRuleToUI();
-                    if (rule == null && uid >= 100000 && (uid % 100000) >= 10000) {
+                    if (rule == null && AegisUtils.isCloneUid(uid)) {
                         Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
                     }
                 });
@@ -164,7 +164,7 @@ public class AppDetailActivity extends BaseActivity {
         }
         ibWifi.setOnClickListener(v -> {
             if (rule == null) {
-                if (uid >= 100000 && (uid % 100000) >= 10000) {
+                if (AegisUtils.isCloneUid(uid)) {
                     Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
                 }
                 return;
@@ -183,7 +183,7 @@ public class AppDetailActivity extends BaseActivity {
         }
         ibOther.setOnClickListener(v -> {
             if (rule == null) {
-                if (uid >= 100000 && (uid % 100000) >= 10000) {
+                if (AegisUtils.isCloneUid(uid)) {
                     Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
                 }
                 return;

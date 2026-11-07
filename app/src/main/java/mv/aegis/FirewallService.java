@@ -878,7 +878,7 @@ public class FirewallService extends VpnService {
             }
         }
 
-        if (matchedRule == null && packet.uid >= 100000 && (packet.uid % 100000) >= 10000) {
+        if (matchedRule == null && AegisUtils.isCloneUid(packet.uid)) {
             if (seenCloneUids.add(packet.uid)) {
                 final int cloneUid = packet.uid;
                 new Thread(() -> {

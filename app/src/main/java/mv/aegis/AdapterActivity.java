@@ -51,7 +51,7 @@ public class AdapterActivity extends CursorAdapter {
         if (uid < 0) {
             tvName.setText("Unknown app");
         } else if (names.isEmpty()) {
-            if (uid >= 100000 && (uid % 100000) >= 10000) {
+            if (AegisUtils.isCloneUid(uid)) {
                 int appId = uid % 100000;
                 int n = uid / 100000;
                 tvName.setText("UID:" + appId + " (user " + n + ")");
@@ -65,7 +65,7 @@ public class AdapterActivity extends CursorAdapter {
         String[] pkgs = null;
         try {
             pkgs = pm.getPackagesForUid(uid);
-            if ((pkgs == null || pkgs.length == 0) && uid >= 100000 && (uid % 100000) >= 10000) {
+            if ((pkgs == null || pkgs.length == 0) && AegisUtils.isCloneUid(uid)) {
                 pkgs = pm.getPackagesForUid(uid % 100000);
             }
         } catch (SecurityException e) {

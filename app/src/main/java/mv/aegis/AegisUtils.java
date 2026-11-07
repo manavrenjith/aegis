@@ -61,11 +61,21 @@ public final class AegisUtils {
         return false;
     }
 
+    public static boolean isCloneUid(int uid) {
+        if (uid < 100000) {
+            return false;
+        }
+        int appId = uid % 100000;
+        return appId >= 10000 && appId <= 19999;
+    }
+
     public static boolean hasInternet(String packageName, Context context) {
         if (packageName != null && packageName.startsWith("clone:")) {
             try {
                 int uid = Integer.parseInt(packageName.substring(6));
-                return hasInternet(uid % 100000, context);
+                if (isCloneUid(uid)) {
+                    return hasInternet(uid % 100000, context);
+                }
             } catch (NumberFormatException ignored) {
             }
         }
@@ -174,18 +184,16 @@ public final class AegisUtils {
             return names;
         }
 
-        if (uid >= 100000) {
+        if (isCloneUid(uid)) {
             int appId = uid % 100000;
             int n = uid / 100000;
-            if (appId >= 10000) {
-                List<String> baseNames = getApplicationNames(appId, context);
-                for (String baseName : baseNames) {
-                    names.add(baseName + " (user " + n + ")");
-                }
-                if (!names.isEmpty()) {
-                    Collections.sort(names);
-                    return names;
-                }
+            List<String> baseNames = getApplicationNames(appId, context);
+            for (String baseName : baseNames) {
+                names.add(baseName + " (user " + n + ")");
+            }
+            if (!names.isEmpty()) {
+                Collections.sort(names);
+                return names;
             }
         }
 
