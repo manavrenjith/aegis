@@ -115,11 +115,22 @@ void handle_ip(const struct arguments *args,
     uint8_t version = (*pkt) >> 4;
     if (version == 4) {
         if (length < sizeof(struct iphdr)) {
-            log_android(ANDROID_LOG_WARN, "IP4 packet too short length %d", length);
+            log_android(ANDROID_LOG_WARN, "IP4 packet too short length %zu", length);
             return;
         }
 
         struct iphdr *ip4hdr = (struct iphdr *) pkt;
+
+        if (ip4hdr->ihl < 5) {
+            log_android(ANDROID_LOG_WARN, "IP4 invalid IHL %u", ip4hdr->ihl);
+            return;
+        }
+
+        uint8_t ipoptlen = (uint8_t) ((ip4hdr->ihl - 5) * 4);
+        if (length < sizeof(struct iphdr) + ipoptlen) {
+            log_android(ANDROID_LOG_WARN, "IP4 packet too short for header length %zu", length);
+            return;
+        }
 
         protocol = ip4hdr->protocol;
         saddr = &ip4hdr->saddr;
@@ -131,11 +142,10 @@ void handle_ip(const struct arguments *args,
             return;
         }
 
-        uint8_t ipoptlen = (uint8_t) ((ip4hdr->ihl - 5) * 4);
         payload = (uint8_t *) (pkt + sizeof(struct iphdr) + ipoptlen);
 
         if (ntohs(ip4hdr->tot_len) != length) {
-            log_android(ANDROID_LOG_ERROR, "Invalid length %u header length %u",
+            log_android(ANDROID_LOG_ERROR, "Invalid length %zu header length %u",
                         length, ntohs(ip4hdr->tot_len));
             return;
         }
@@ -148,37 +158,35 @@ void handle_ip(const struct arguments *args,
         }
     } else if (version == 6) {
         if (length < sizeof(struct ip6_hdr)) {
-            log_android(ANDROID_LOG_WARN, "IP6 packet too short length %d", length);
+            log_android(ANDROID_LOG_WARN, "IP6 packet too short length %zu", length);
             return;
         }
 
         struct ip6_hdr *ip6hdr = (struct ip6_hdr *) pkt;
 
         // Skip extension headers
-        uint16_t off = 0;
+        size_t off = sizeof(struct ip6_hdr);
         protocol = ip6hdr->ip6_nxt;
-        if (!is_upper_layer(protocol)) {
+        while (!is_upper_layer(protocol) && is_lower_layer(protocol)) {
             log_android(ANDROID_LOG_WARN, "IP6 extension %d", protocol);
-            off = sizeof(struct ip6_hdr);
+            if (off + sizeof(struct ip6_ext) > length) {
+                log_android(ANDROID_LOG_WARN, "IP6 packet too short for extension header");
+                return;
+            }
             struct ip6_ext *ext = (struct ip6_ext *) (pkt + off);
-            while (is_lower_layer(ext->ip6e_nxt) && !is_upper_layer(protocol)) {
-                protocol = ext->ip6e_nxt;
-                log_android(ANDROID_LOG_WARN, "IP6 extension %d", protocol);
-
-                off += (8 + ext->ip6e_len);
-                ext = (struct ip6_ext *) (pkt + off);
+            size_t extlen = 8 + ext->ip6e_len;
+            if (off + extlen > length) {
+                log_android(ANDROID_LOG_WARN, "IP6 packet too short for extension body");
+                return;
             }
-            if (!is_upper_layer(protocol)) {
-                off = 0;
-                protocol = ip6hdr->ip6_nxt;
-                log_android(ANDROID_LOG_WARN, "IP6 final extension %d", protocol);
-            }
+            protocol = ext->ip6e_nxt;
+            off += extlen;
         }
 
         saddr = &ip6hdr->ip6_src;
         daddr = &ip6hdr->ip6_dst;
 
-        payload = (uint8_t *) (pkt + sizeof(struct ip6_hdr) + off);
+        payload = (uint8_t *) (pkt + off);
 
         // TODO checksum
     } else {
@@ -275,7 +283,10 @@ void handle_ip(const struct arguments *args,
 
         if (get_sni(data, datalen, server_name)) {
             log_android(ANDROID_LOG_INFO, "TLS server name: %s", server_name);
-            uid = get_uid(version, protocol, saddr, sport, daddr, dport);
+            if (args->ctx->sdk <= 28) // Android 9 Pie
+                uid = get_uid(version, protocol, saddr, sport, daddr, dport);
+            else
+                uid = get_uid_q(args, version, protocol, source, sport, dest, dport);
             dns_resolved(args, server_name, server_name, dest, -1, uid);
         }
     }
@@ -477,11 +488,19 @@ jint get_uid_sub(const int version, const int protocol,
             hex2bytes(shex, _saddr);
             hex2bytes(dhex, _daddr);
 
-            for (int w = 0; w < ws; w++)
-                ((uint32_t *) _saddr)[w] = htonl(((uint32_t *) _saddr)[w]);
+            for (int w = 0; w < ws; w++) {
+                uint32_t val;
+                memcpy(&val, _saddr + w * sizeof(uint32_t), sizeof(uint32_t));
+                val = htonl(val);
+                memcpy(_saddr + w * sizeof(uint32_t), &val, sizeof(uint32_t));
+            }
 
-            for (int w = 0; w < ws; w++)
-                ((uint32_t *) _daddr)[w] = htonl(((uint32_t *) _daddr)[w]);
+            for (int w = 0; w < ws; w++) {
+                uint32_t val;
+                memcpy(&val, _daddr + w * sizeof(uint32_t), sizeof(uint32_t));
+                val = htonl(val);
+                memcpy(_daddr + w * sizeof(uint32_t), &val, sizeof(uint32_t));
+            }
 
             if (_sport == sport &&
                 (_dport == dport || _dport == 0) &&
@@ -516,7 +535,8 @@ jint get_uid_sub(const int version, const int protocol,
             uid_cache[c].time = now;
         } else {
             log_android(ANDROID_LOG_ERROR, "Invalid field #%d: %s", fields, line);
-            return -2;
+            uid = -2;
+            break;
         }
     }
 
