@@ -843,19 +843,24 @@ public class FirewallService extends VpnService {
         UidDestKey key = getBatchItemKey(item);
 
         synchronized (logQueueLock) {
+            boolean wasEmpty = logQueue.isEmpty();
             boolean isFull = logQueue.size() >= QUEUE_SOFT_CAPACITY;
             if (!isFull) {
                 seenPairs.put(key, Boolean.TRUE);
                 logQueue.add(item);
                 pendingEntries.put(key, item);
-                logQueueLock.notify();
+                if (wasEmpty || logQueue.size() == 100) {
+                    logQueueLock.notify();
+                }
             } else {
                 if (!seenPairs.containsKey(key)) {
                     // Queue full, but pair not seen: must still be enqueued (exceeds soft limit)
                     seenPairs.put(key, Boolean.TRUE);
                     logQueue.add(item);
                     pendingEntries.put(key, item);
-                    logQueueLock.notify();
+                    if (wasEmpty || logQueue.size() == 100) {
+                        logQueueLock.notify();
+                    }
                 } else {
                     // Already-seen pair: merge into pending entry if one exists, else drop
                     AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
@@ -876,11 +881,29 @@ public class FirewallService extends VpnService {
             synchronized (logQueueLock) {
                 while (logQueue.isEmpty() && logBatchRunning) {
                     try {
-                        logQueueLock.wait(250);
+                        logQueueLock.wait();
                     } catch (InterruptedException e) {
                         // Interrupted on shutdown
                     }
                 }
+                if (logQueue.isEmpty()) {
+                    break;
+                }
+
+                long firstItemTime = SystemClock.elapsedRealtime();
+                while (logBatchRunning && logQueue.size() < 100) {
+                    long elapsed = SystemClock.elapsedRealtime() - firstItemTime;
+                    if (elapsed >= 250L) {
+                        break;
+                    }
+                    try {
+                        logQueueLock.wait(250L - elapsed);
+                    } catch (InterruptedException e) {
+                        // Interrupted on shutdown
+                        break;
+                    }
+                }
+
                 for (int i = 0; i < 100 && !logQueue.isEmpty(); i++) {
                     AegisDatabase.LogBatchItem item = logQueue.poll();
                     if (item != null) {
