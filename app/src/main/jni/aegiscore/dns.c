@@ -217,13 +217,21 @@ void parse_dns_response(const struct arguments *args, const struct ng_session *s
                 }
             }
 
+            int uid = -1;
+            if (s != NULL) {
+                if (s->protocol == IPPROTO_UDP && s->udp.uid >= 0)
+                    uid = s->udp.uid;
+                else if (s->protocol == IPPROTO_TCP && s->tcp.uid >= 0)
+                    uid = s->tcp.uid;
+            }
+
             // Log qname
             char name[DNS_QNAME_MAX + 40 + 1];
             sprintf(name, "qtype %d qname %s rcode %d", qtype, qname, dns->rcode);
             jobject objPacket = create_packet(
                     args, version, s->protocol, "",
                     source, sport, dest, dport,
-                    name, 0, 0);
+                    name, uid, 0);
             log_packet(args, objPacket);
         }
     } else if (acount > 0)
