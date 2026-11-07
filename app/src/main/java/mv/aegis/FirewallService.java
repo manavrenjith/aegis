@@ -480,15 +480,8 @@ public class FirewallService extends VpnService {
             ParcelFileDescriptor vpnFd,
             Looper cmdLooper
     ) {
-        if (vpnFd != null) {
-            if (context != 0) {
-                jni_stop(context);
-            }
-            try {
-                vpnFd.close();
-            } catch (Exception exception) {
-                Log.w(TAG, "Failed to close VPN in teardown", exception);
-            }
+        if (context != 0) {
+            jni_stop(context);
         }
 
         boolean tunnelStillAlive = false;
@@ -500,6 +493,16 @@ public class FirewallService extends VpnService {
             if (tThread.isAlive()) {
                 Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
                 tunnelStillAlive = true;
+            }
+        }
+
+        if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
+            Log.w(TAG, "tunnel thread is still alive; skipping closing tunFd to prevent fd reuse races");
+        } else if (vpnFd != null) {
+            try {
+                vpnFd.close();
+            } catch (Exception exception) {
+                Log.w(TAG, "Failed to close VPN in teardown", exception);
             }
         }
 
@@ -548,15 +551,9 @@ public class FirewallService extends VpnService {
         tunnelThread = null;
         Thread snapshotLogBatchThread = logBatchThread;
         logBatchThread = null;
-        ParcelFileDescriptor snapshotVpn = vpn;
+        ParcelFileDescriptor snapshotVpn = vpn != null ? vpn : tunFd;
         vpn = null;
-        if (tunFd != null) {
-            try {
-                tunFd.close();
-            } catch (Exception ignored) {
-            }
-            tunFd = null;
-        }
+        tunFd = null;
         Looper snapshotCommandLooper = commandLooper;
         commandLooper = null;
 
