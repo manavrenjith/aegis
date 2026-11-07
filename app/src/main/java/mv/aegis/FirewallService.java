@@ -81,6 +81,7 @@ public class FirewallService extends VpnService {
     private ParcelFileDescriptor tunFd = null;
     private List<FirewallRule> currentRules = null;
     private boolean temporarilyStopped = false;
+    private volatile HandlerThread commandThread;
     private volatile Looper commandLooper;
     private volatile CommandHandler commandHandler;
     private static Object jni_lock = new Object();
@@ -261,11 +262,18 @@ public class FirewallService extends VpnService {
             return;
         }
 
+        long localContext;
         synchronized (jni_lock) {
             if (jni_context == 0) {
                 Log.d(TAG, "jni_init called in start after waiting for prior teardown");
                 jni_context = jni_init(Build.VERSION.SDK_INT);
             }
+            localContext = jni_context;
+        }
+
+        if (localContext == 0) {
+            Log.e(TAG, "start(): jni_context is 0, aborting");
+            return;
         }
 
         currentRules = FirewallRule.getRules(false, this);  // ← add this
@@ -301,8 +309,8 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        Log.d(TAG, "jni_start called, context=" + jni_context);
-        jni_start(jni_context, com.mv.aegis.BuildConfig.DEBUG ? Log.DEBUG : Log.WARN);
+        Log.d(TAG, "jni_start called, context=" + localContext);
+        jni_start(localContext, com.mv.aegis.BuildConfig.DEBUG ? Log.DEBUG : Log.WARN);
 
         if (tunFd != null && tunFd.getFileDescriptor().valid()) {
             try {
@@ -346,20 +354,16 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        long threadContext;
-        synchronized (jni_lock) {
-            threadContext = jni_context;
-        }
         ParcelFileDescriptor threadTunFd = tunFd;
-        if (threadContext == 0 || threadTunFd == null || !threadTunFd.getFileDescriptor().valid()) {
-            Log.w(TAG, "Cannot start tunnel thread: invalid threadContext=" + threadContext + " or threadTunFd=" + threadTunFd);
+        if (threadTunFd == null || !threadTunFd.getFileDescriptor().valid()) {
+            Log.w(TAG, "Cannot start tunnel thread: invalid threadTunFd=" + threadTunFd);
             return;
         }
 
         tunnelThread = new Thread(() -> {
             int tun = threadTunFd.getFd();
             Log.d(TAG, "jni_run called, tun=" + tun);
-            jni_run(threadContext, tun, false, 3);
+            jni_run(localContext, tun, false, 3);
         }, "FirewallTunnel");
         tunnelThread.start();
     }
@@ -377,8 +381,18 @@ public class FirewallService extends VpnService {
         if (destroyed) {
             return;
         }
+
+        long localContext;
+        synchronized (jni_lock) {
+            localContext = jni_context;
+        }
+        if (localContext == 0) {
+            Log.w(TAG, "stop(): jni_context is 0, skipping jni_stop");
+            return;
+        }
+
         if (vpn != null) {
-            jni_stop(jni_context);
+            jni_stop(localContext);
             try {
                 vpn.close();
             } catch (Exception exception) {
@@ -462,9 +476,9 @@ public class FirewallService extends VpnService {
             }
         }
 
-        HandlerThread handlerThread = new HandlerThread("AegisCommand", android.os.Process.THREAD_PRIORITY_FOREGROUND);
-        handlerThread.start();
-        commandLooper = handlerThread.getLooper();
+        commandThread = new HandlerThread("AegisCommand", android.os.Process.THREAD_PRIORITY_FOREGROUND);
+        commandThread.start();
+        commandLooper = commandThread.getLooper();
         commandHandler = new CommandHandler(commandLooper);
 
         threatDetector = new ThreatDetector(this);
@@ -534,79 +548,19 @@ public class FirewallService extends VpnService {
     }
 
     private void teardown(
-            long context,
-            Thread tThread,
-            Thread lThread,
-            ParcelFileDescriptor vpnFd,
-            Looper cmdLooper,
+            HandlerThread cmdThread,
             CountDownLatch latch
     ) {
-        try {
-            if (context != 0) {
-                jni_stop(context);
-            }
-
-            boolean tunnelStillAlive = false;
-            if (tThread != null && tThread.isAlive()) {
-                try {
-                    tThread.join(2000);
-                } catch (InterruptedException ignored) {
-                }
-                if (tThread.isAlive()) {
-                    Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
-                    tunnelStillAlive = true;
-                }
-            }
-
-            if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
-                Log.w(TAG, "tunnel thread is still alive; skipping closing tunFd to prevent fd reuse races");
-            } else if (vpnFd != null) {
-                try {
-                    vpnFd.close();
-                } catch (Exception exception) {
-                    Log.w(TAG, "Failed to close VPN in teardown", exception);
-                }
-            }
-
-            if (context != 0) {
-                if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
-                    Log.w(TAG, "tunnel thread is still alive; leaking native context " + context + " to prevent crash");
-                } else {
-                    jni_done(context);
-                }
-            }
-        } finally {
-            if (latch != null) {
-                latch.countDown();
-            }
-        }
-
-        logBatchRunning = false;
-        if (lThread != null) {
-            synchronized (logQueueLock) {
-                logQueueLock.notifyAll();
-            }
-            lThread.interrupt();
+        boolean commandThreadStillAlive = false;
+        if (cmdThread != null && cmdThread.isAlive()) {
             try {
-                lThread.join(3000);
+                cmdThread.join(8000);
             } catch (InterruptedException ignored) {
             }
-        }
-
-        if (cmdLooper != null) {
-            cmdLooper.quitSafely();
-        }
-    }
-
-    @Override
-    public void onDestroy() {
-        destroyed = true;
-        if (screenReceiver != null) {
-            try {
-                unregisterReceiver(screenReceiver);
-            } catch (Exception ignored) {
+            if (cmdThread.isAlive()) {
+                Log.e(TAG, "commandThread still alive after join timeout in teardown");
+                commandThreadStillAlive = true;
             }
-            screenReceiver = null;
         }
 
         long snapshotContext;
@@ -622,18 +576,84 @@ public class FirewallService extends VpnService {
         ParcelFileDescriptor snapshotVpn = vpn != null ? vpn : tunFd;
         vpn = null;
         tunFd = null;
-        Looper snapshotCommandLooper = commandLooper;
-        commandLooper = null;
+
+        try {
+            if (snapshotContext != 0) {
+                jni_stop(snapshotContext);
+            }
+
+            boolean tunnelStillAlive = false;
+            if (snapshotTunnelThread != null && snapshotTunnelThread.isAlive()) {
+                try {
+                    snapshotTunnelThread.join(2000);
+                } catch (InterruptedException ignored) {
+                }
+                if (snapshotTunnelThread.isAlive()) {
+                    Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
+                    tunnelStillAlive = true;
+                }
+            }
+
+            if (tunnelStillAlive || (snapshotTunnelThread != null && snapshotTunnelThread.isAlive())) {
+                Log.w(TAG, "tunnel thread is still alive; skipping closing tunFd to prevent fd reuse races");
+            } else if (snapshotVpn != null) {
+                try {
+                    snapshotVpn.close();
+                } catch (Exception exception) {
+                    Log.w(TAG, "Failed to close VPN in teardown", exception);
+                }
+            }
+
+            if (snapshotContext != 0) {
+                if (commandThreadStillAlive || (cmdThread != null && cmdThread.isAlive())) {
+                    Log.w(TAG, "commandThread is still alive; leaking native context " + snapshotContext + " to prevent crash");
+                } else if (tunnelStillAlive || (snapshotTunnelThread != null && snapshotTunnelThread.isAlive())) {
+                    Log.w(TAG, "tunnel thread is still alive; leaking native context " + snapshotContext + " to prevent crash");
+                } else {
+                    jni_done(snapshotContext);
+                }
+            }
+        } finally {
+            if (latch != null) {
+                latch.countDown();
+            }
+        }
+
+        logBatchRunning = false;
+        if (snapshotLogBatchThread != null) {
+            synchronized (logQueueLock) {
+                logQueueLock.notifyAll();
+            }
+            snapshotLogBatchThread.interrupt();
+            try {
+                snapshotLogBatchThread.join(3000);
+            } catch (InterruptedException ignored) {
+            }
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        destroyed = true;
+        if (screenReceiver != null) {
+            try {
+                unregisterReceiver(screenReceiver);
+            } catch (Exception ignored) {
+            }
+            screenReceiver = null;
+        }
 
         CountDownLatch latch = new CountDownLatch(1);
         activeTeardownLatch = latch;
 
+        if (commandLooper != null) {
+            commandLooper.quitSafely();
+        }
+
+        HandlerThread snapshotCommandThread = commandThread;
+
         new Thread(() -> teardown(
-                snapshotContext,
-                snapshotTunnelThread,
-                snapshotLogBatchThread,
-                snapshotVpn,
-                snapshotCommandLooper,
+                snapshotCommandThread,
                 latch
         ), "FirewallTeardown").start();
 
