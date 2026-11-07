@@ -285,9 +285,16 @@ void handle_ip(const struct arguments *args,
     flags[flen] = 0;
 
     // Limit number of sessions
+    struct ng_session *udp_session = NULL;
+    int has_udp = 0;
+    if (protocol == IPPROTO_UDP) {
+        udp_session = get_udp_session(args, pkt, payload);
+        has_udp = (udp_session != NULL || (dport == 53 && !args->fwd53));
+    }
+
     if (sessions >= maxsessions) {
         if ((protocol == IPPROTO_ICMP || protocol == IPPROTO_ICMPV6) ||
-            (protocol == IPPROTO_UDP && !has_udp_session(args, pkt, payload)) ||
+            (protocol == IPPROTO_UDP && !has_udp) ||
             (protocol == IPPROTO_TCP && syn)) {
             log_android(ANDROID_LOG_ERROR,
                         "%d of max %d sessions, dropping version %d protocol %d",
@@ -327,7 +334,7 @@ void handle_ip(const struct arguments *args,
 
     // Get uid
     if (protocol == IPPROTO_ICMP || protocol == IPPROTO_ICMPV6 ||
-        (protocol == IPPROTO_UDP && !has_udp_session(args, pkt, payload)) ||
+        (protocol == IPPROTO_UDP && !has_udp) ||
         (protocol == IPPROTO_TCP && syn)) {
         if (args->ctx->sdk <= 28) // Android 9 Pie
             uid = get_uid(args->ctx, version, protocol, saddr, sport, daddr, dport);
@@ -342,7 +349,7 @@ void handle_ip(const struct arguments *args,
     // Check if allowed
     int allowed = 0;
     struct allowed *redirect = NULL;
-    if (protocol == IPPROTO_UDP && has_udp_session(args, pkt, payload))
+    if (protocol == IPPROTO_UDP && has_udp)
         allowed = 1; // could be a lingering/blocked session
     else if (protocol == IPPROTO_TCP && (!syn || (uid == 0 && dport == 53)) && *server_name == 0)
         allowed = 1; // assume existing session
@@ -357,7 +364,14 @@ void handle_ip(const struct arguments *args,
             allowed = 0;
     }
 
-    // Handle allowed traffic
+    jint log_uid = uid;
+    if (protocol == IPPROTO_TCP && !syn) {
+        struct ng_session *tcp_session = get_tcp_session(args, pkt, payload);
+        log_uid = (tcp_session != NULL ? tcp_session->tcp.uid : -1);
+    } else if (protocol == IPPROTO_UDP && has_udp) {
+        log_uid = (udp_session != NULL ? udp_session->udp.uid : -1);
+    }
+
     // Handle allowed traffic
     if (allowed) {
         if (protocol == IPPROTO_ICMP || protocol == IPPROTO_ICMPV6)
@@ -368,7 +382,7 @@ void handle_ip(const struct arguments *args,
             handle_tcp(args, pkt, length, payload, uid, allowed, redirect, epoll_fd);
 
         jobject logPacket = create_packet(
-                args, version, protocol, flags, source, sport, dest, dport, data, uid, 1);
+                args, version, protocol, flags, source, sport, dest, dport, data, log_uid, 1);
         log_packet(args, logPacket);
     } else {
         if (protocol == IPPROTO_UDP)
@@ -380,7 +394,7 @@ void handle_ip(const struct arguments *args,
                     version, protocol, dest, dport, syn);
 
         jobject logPacket = create_packet(
-                args, version, protocol, flags, source, sport, dest, dport, data, uid, 0);
+                args, version, protocol, flags, source, sport, dest, dport, data, log_uid, 0);
         log_packet(args, logPacket);
     }
 }

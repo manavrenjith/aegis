@@ -130,15 +130,12 @@ void check_udp_socket(const struct arguments *args, const struct epoll_event *ev
     }
 }
 
-int has_udp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload) {
+struct ng_session *get_udp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload) {
     // Get headers
     const uint8_t version = (*pkt) >> 4;
     const struct iphdr *ip4 = (struct iphdr *) pkt;
     const struct ip6_hdr *ip6 = (struct ip6_hdr *) pkt;
     const struct udphdr *udphdr = (struct udphdr *) payload;
-
-    if (ntohs(udphdr->dest) == 53 && !args->fwd53)
-        return 1;
 
     // Search session
     struct ng_session *cur = args->ctx->ng_session;
@@ -152,7 +149,16 @@ int has_udp_session(const struct arguments *args, const uint8_t *pkt, const uint
                              memcmp(&cur->udp.daddr.ip6, &ip6->ip6_dst, 16) == 0)))
         cur = cur->next;
 
-    return (cur != NULL);
+    return cur;
+}
+
+int has_udp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload) {
+    const struct udphdr *udphdr = (struct udphdr *) payload;
+
+    if (ntohs(udphdr->dest) == 53 && !args->fwd53)
+        return 1;
+
+    return (get_udp_session(args, pkt, payload) != NULL);
 }
 
 void block_udp(const struct arguments *args,

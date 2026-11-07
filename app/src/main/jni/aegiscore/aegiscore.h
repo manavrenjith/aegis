@@ -428,6 +428,8 @@ jboolean handle_icmp(const struct arguments *args,
 
 int has_udp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload);
 
+struct ng_session *get_udp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload);
+
 struct ng_session *get_tcp_session(const struct arguments *args, const uint8_t *pkt, const uint8_t *payload);
 
 void block_udp(const struct arguments *args,
