@@ -17,8 +17,14 @@ public class Packet {
     public int uid;
     public boolean allowed;
     public int status = -1;
+    public boolean hasCustomStatus = false;
 
     public Packet() {
+    }
+
+    public void setStatus(int status) {
+        this.status = status;
+        this.hasCustomStatus = true;
     }
 
     @Override

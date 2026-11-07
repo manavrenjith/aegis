@@ -1068,7 +1068,7 @@ public class FirewallService extends VpnService {
                         op.flags = "OVERFLOW";
                         op.data = of.count + " more destinations [" + String.join(", ", of.sampleDestinations) + "]";
                         op.allowed = false;
-                        op.status = Packet.STATUS_OVERFLOW;
+                        op.setStatus(Packet.STATUS_OVERFLOW);
                         batch.add(new AegisDatabase.LogBatchItem(op, null, of.count, of.interactive));
                     }
                 }

@@ -372,9 +372,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
             if (this.packet == null || other.packet == null) {
                 return;
             }
-            this.timestamp = other.timestamp;
-            this.interactive = other.interactive;
-            this.packet.time = other.timestamp;
+            // Preserve first-seen timestamp: do not update this.timestamp or this.packet.time
+            this.interactive = this.interactive || other.interactive;
             this.connection += (other.connection > 0 ? other.connection : 1);
         }
     }
@@ -422,7 +421,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         cv.put("dname", dname);
         cv.put("data", packet.data);
         cv.put("uid", packet.uid >= 0 ? packet.uid : null);
-        int allowedVal = packet.status >= 0 ? packet.status : (packet.allowed ? 1 : 0);
+        int allowedVal = (packet.hasCustomStatus && packet.status >= 0) ? packet.status : (packet.allowed ? 1 : 0);
         cv.put("allowed", allowedVal);
         cv.put("connection", connection);
         cv.put("interactive", interactive ? 1 : 0);
@@ -491,7 +490,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             cv.put("dname", dname);
             cv.put("data", packet.data);
             cv.put("uid", packet.uid >= 0 ? packet.uid : null);
-            int allowedVal = packet.status >= 0 ? packet.status : (packet.allowed ? 1 : 0);
+            int allowedVal = (packet.hasCustomStatus && packet.status >= 0) ? packet.status : (packet.allowed ? 1 : 0);
             cv.put("allowed", allowedVal);
             cv.put("connection", connection);
             cv.put("interactive", interactive ? 1 : 0);
