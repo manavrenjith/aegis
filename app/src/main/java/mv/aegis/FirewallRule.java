@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -421,6 +423,49 @@ public class FirewallRule {
 						return collator.compare(left.name, right.name);
 					}
 				});
+			}
+
+			List<FirewallRule> nonCloneRules = new ArrayList<>();
+			List<FirewallRule> cloneRules = new ArrayList<>();
+			for (FirewallRule r : listRules) {
+				if (r.packageName != null && r.packageName.startsWith("clone:")) {
+					cloneRules.add(r);
+				} else {
+					nonCloneRules.add(r);
+				}
+			}
+
+			if (!cloneRules.isEmpty()) {
+				Map<Integer, List<FirewallRule>> clonesByBaseUid = new LinkedHashMap<>();
+				List<FirewallRule> orphanClones = new ArrayList<>();
+				Set<Integer> presentBaseUids = new HashSet<>();
+				for (FirewallRule r : nonCloneRules) {
+					presentBaseUids.add(r.uid);
+				}
+
+				for (FirewallRule cr : cloneRules) {
+					int baseUid = cr.uid % 100000;
+					if (presentBaseUids.contains(baseUid)) {
+						List<FirewallRule> list = clonesByBaseUid.get(baseUid);
+						if (list == null) {
+							list = new ArrayList<>();
+							clonesByBaseUid.put(baseUid, list);
+						}
+						list.add(cr);
+					} else {
+						orphanClones.add(cr);
+					}
+				}
+
+				listRules.clear();
+				for (FirewallRule r : nonCloneRules) {
+					listRules.add(r);
+					List<FirewallRule> matchedClones = clonesByBaseUid.get(r.uid);
+					if (matchedClones != null) {
+						listRules.addAll(matchedClones);
+					}
+				}
+				listRules.addAll(orphanClones);
 			}
 
 			Log.d("Aegis.Rule", "getRules returning " + listRules.size() + " rules, all=" + all);
