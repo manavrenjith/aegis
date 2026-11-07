@@ -238,8 +238,8 @@ public class FirewallService extends VpnService {
         if (priorTeardown != null && priorTeardown.getCount() > 0) {
             Log.d(TAG, "Waiting for prior teardown to complete...");
             try {
-                if (!priorTeardown.await(3, TimeUnit.SECONDS)) {
-                    Log.w(TAG, "Timed out (3s) waiting for prior teardown to complete");
+                if (!priorTeardown.await(6, TimeUnit.SECONDS)) {
+                    Log.w(TAG, "Timed out (6s) waiting for prior teardown to complete");
                 }
             } catch (InterruptedException e) {
                 Log.w(TAG, "Interrupted while waiting for prior teardown", e);
@@ -501,31 +501,46 @@ public class FirewallService extends VpnService {
             Thread tThread,
             Thread lThread,
             ParcelFileDescriptor vpnFd,
-            Looper cmdLooper
+            Looper cmdLooper,
+            CountDownLatch latch
     ) {
-        if (context != 0) {
-            jni_stop(context);
-        }
-
-        boolean tunnelStillAlive = false;
-        if (tThread != null && tThread.isAlive()) {
-            try {
-                tThread.join(2000);
-            } catch (InterruptedException ignored) {
+        try {
+            if (context != 0) {
+                jni_stop(context);
             }
-            if (tThread.isAlive()) {
-                Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
-                tunnelStillAlive = true;
-            }
-        }
 
-        if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
-            Log.w(TAG, "tunnel thread is still alive; skipping closing tunFd to prevent fd reuse races");
-        } else if (vpnFd != null) {
-            try {
-                vpnFd.close();
-            } catch (Exception exception) {
-                Log.w(TAG, "Failed to close VPN in teardown", exception);
+            boolean tunnelStillAlive = false;
+            if (tThread != null && tThread.isAlive()) {
+                try {
+                    tThread.join(2000);
+                } catch (InterruptedException ignored) {
+                }
+                if (tThread.isAlive()) {
+                    Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
+                    tunnelStillAlive = true;
+                }
+            }
+
+            if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
+                Log.w(TAG, "tunnel thread is still alive; skipping closing tunFd to prevent fd reuse races");
+            } else if (vpnFd != null) {
+                try {
+                    vpnFd.close();
+                } catch (Exception exception) {
+                    Log.w(TAG, "Failed to close VPN in teardown", exception);
+                }
+            }
+
+            if (context != 0) {
+                if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
+                    Log.w(TAG, "tunnel thread is still alive; leaking native context " + context + " to prevent crash");
+                } else {
+                    jni_done(context);
+                }
+            }
+        } finally {
+            if (latch != null) {
+                latch.countDown();
             }
         }
 
@@ -538,14 +553,6 @@ public class FirewallService extends VpnService {
             try {
                 lThread.join(3000);
             } catch (InterruptedException ignored) {
-            }
-        }
-
-        if (context != 0) {
-            if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
-                Log.w(TAG, "tunnel thread is still alive; leaking native context " + context + " to prevent crash");
-            } else {
-                jni_done(context);
             }
         }
 
@@ -583,19 +590,14 @@ public class FirewallService extends VpnService {
         CountDownLatch latch = new CountDownLatch(1);
         activeTeardownLatch = latch;
 
-        new Thread(() -> {
-            try {
-                teardown(
-                        snapshotContext,
-                        snapshotTunnelThread,
-                        snapshotLogBatchThread,
-                        snapshotVpn,
-                        snapshotCommandLooper
-                );
-            } finally {
-                latch.countDown();
-            }
-        }, "FirewallTeardown").start();
+        new Thread(() -> teardown(
+                snapshotContext,
+                snapshotTunnelThread,
+                snapshotLogBatchThread,
+                snapshotVpn,
+                snapshotCommandLooper,
+                latch
+        ), "FirewallTeardown").start();
 
         super.onDestroy();
     }
