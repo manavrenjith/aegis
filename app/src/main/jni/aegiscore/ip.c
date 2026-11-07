@@ -283,10 +283,15 @@ void handle_ip(const struct arguments *args,
 
         if (get_sni(data, datalen, server_name)) {
             log_android(ANDROID_LOG_INFO, "TLS server name: %s", server_name);
-            if (args->ctx->sdk <= 28) // Android 9 Pie
-                uid = get_uid(version, protocol, saddr, sport, daddr, dport);
-            else
-                uid = get_uid_q(args, version, protocol, source, sport, dest, dport);
+            struct ng_session *session = get_tcp_session(args, pkt, payload);
+            if (session != NULL && session->tcp.uid >= 0) {
+                uid = session->tcp.uid;
+            } else {
+                if (args->ctx->sdk <= 28) // Android 9 Pie
+                    uid = get_uid(version, protocol, saddr, sport, daddr, dport);
+                else
+                    uid = get_uid_q(args, version, protocol, source, sport, dest, dport);
+            }
             dns_resolved(args, server_name, server_name, dest, -1, uid);
         }
     }
