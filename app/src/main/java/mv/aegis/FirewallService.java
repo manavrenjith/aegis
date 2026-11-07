@@ -26,6 +26,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -112,7 +113,29 @@ public class FirewallService extends VpnService {
         }
     }
 
+    private static final class UidOverflow {
+        final int uid;
+        int count = 0;
+        final List<String> sampleDestinations = new ArrayList<>(5);
+        long lastTimestamp = 0;
+        boolean interactive = false;
+
+        UidOverflow(int uid) {
+            this.uid = uid;
+        }
+
+        void addDestination(String dest, long timestamp, boolean isInteractive) {
+            count++;
+            this.lastTimestamp = timestamp;
+            this.interactive = isInteractive;
+            if (sampleDestinations.size() < 5 && dest != null && !dest.isEmpty() && !sampleDestinations.contains(dest)) {
+                sampleDestinations.add(dest);
+            }
+        }
+    }
+
     private static final int QUEUE_SOFT_CAPACITY = 2000;
+    private static final int QUEUE_HARD_CAPACITY = 10000;
     private final Object logQueueLock = new Object();
     private final ArrayDeque<AegisDatabase.LogBatchItem> logQueue = new ArrayDeque<>();
     private final Map<UidDestKey, AegisDatabase.LogBatchItem> pendingEntries = new HashMap<>();
@@ -122,9 +145,11 @@ public class FirewallService extends VpnService {
             return size() > 5000;
         }
     };
+    private final Map<Integer, UidOverflow> overflowByUid = new HashMap<>();
     private final AtomicLong mergedCount = new AtomicLong(0);
     private final AtomicLong droppedCount = new AtomicLong(0);
     private final AtomicLong unresolvedUidCount = new AtomicLong(0);
+    private final AtomicLong overflowCount = new AtomicLong(0);
     private volatile long lastStatsWarnTime = 0;
 
     private Thread logBatchThread = null;
@@ -802,8 +827,9 @@ public class FirewallService extends VpnService {
             long merged = mergedCount.get();
             long dropped = droppedCount.get();
             long unresolved = unresolvedUidCount.get();
-            if (merged > 0 || dropped > 0 || unresolved > 0) {
-                Log.w(TAG, "Log queue stats: merged=" + merged + ", dropped=" + dropped + ", unresolved_uid=" + unresolved);
+            long overflow = overflowCount.get();
+            if (merged > 0 || dropped > 0 || unresolved > 0 || overflow > 0) {
+                Log.w(TAG, "Log queue stats: merged=" + merged + ", dropped=" + dropped + ", unresolved_uid=" + unresolved + ", overflow=" + overflow);
                 lastStatsWarnTime = now;
             }
         }
@@ -811,7 +837,7 @@ public class FirewallService extends VpnService {
 
     private boolean isLogQueueEmpty() {
         synchronized (logQueueLock) {
-            return logQueue.isEmpty();
+            return logQueue.isEmpty() && overflowByUid.isEmpty();
         }
     }
 
@@ -844,15 +870,28 @@ public class FirewallService extends VpnService {
 
         synchronized (logQueueLock) {
             boolean wasEmpty = logQueue.isEmpty();
-            boolean isFull = logQueue.size() >= QUEUE_SOFT_CAPACITY;
-            if (!isFull) {
+            boolean isUsageOrDns = (item.usage != null || item.rr != null);
+
+            if (isUsageOrDns) {
+                // Usage and DNS items are never dropped or overflowed: always enqueue them
                 seenPairs.put(key, Boolean.TRUE);
                 logQueue.add(item);
                 pendingEntries.put(key, item);
                 if (wasEmpty || logQueue.size() == 100) {
                     logQueueLock.notify();
                 }
-            } else {
+                return;
+            }
+
+            int queueSize = logQueue.size();
+            if (queueSize < QUEUE_SOFT_CAPACITY) {
+                seenPairs.put(key, Boolean.TRUE);
+                logQueue.add(item);
+                pendingEntries.put(key, item);
+                if (wasEmpty || logQueue.size() == 100) {
+                    logQueueLock.notify();
+                }
+            } else if (queueSize < QUEUE_HARD_CAPACITY) {
                 if (!seenPairs.containsKey(key)) {
                     // Queue full, but pair not seen: must still be enqueued (exceeds soft limit)
                     seenPairs.put(key, Boolean.TRUE);
@@ -871,6 +910,29 @@ public class FirewallService extends VpnService {
                         droppedCount.incrementAndGet();
                     }
                 }
+            } else {
+                // At hard cap (queueSize >= QUEUE_HARD_CAPACITY)
+                if (seenPairs.containsKey(key)) {
+                    // Already-seen pair: merge into pending entry if exists, else drop
+                    AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
+                    if (pending != null) {
+                        pending.merge(item);
+                        mergedCount.incrementAndGet();
+                    } else {
+                        droppedCount.incrementAndGet();
+                    }
+                } else {
+                    // New (uid, destination) pair at hard cap: update per-uid overflow aggregation
+                    int itemUid = item.packet != null ? item.packet.uid : -1;
+                    String dest = item.packet != null && item.packet.daddr != null ? item.packet.daddr : "";
+                    UidOverflow overflow = overflowByUid.get(itemUid);
+                    if (overflow == null) {
+                        overflow = new UidOverflow(itemUid);
+                        overflowByUid.put(itemUid, overflow);
+                    }
+                    overflow.addDestination(dest, now, interactive);
+                    overflowCount.incrementAndGet();
+                }
             }
         }
     }
@@ -879,19 +941,19 @@ public class FirewallService extends VpnService {
         List<AegisDatabase.LogBatchItem> batch = new ArrayList<>(100);
         while (logBatchRunning || !isLogQueueEmpty()) {
             synchronized (logQueueLock) {
-                while (logQueue.isEmpty() && logBatchRunning) {
+                while (logQueue.isEmpty() && overflowByUid.isEmpty() && logBatchRunning) {
                     try {
                         logQueueLock.wait();
                     } catch (InterruptedException e) {
                         // Interrupted on shutdown
                     }
                 }
-                if (logQueue.isEmpty()) {
+                if (logQueue.isEmpty() && overflowByUid.isEmpty()) {
                     break;
                 }
 
                 long firstItemTime = SystemClock.elapsedRealtime();
-                while (logBatchRunning && logQueue.size() < 100) {
+                while (logBatchRunning && logQueue.size() < 100 && overflowByUid.isEmpty()) {
                     long elapsed = SystemClock.elapsedRealtime() - firstItemTime;
                     if (elapsed >= 250L) {
                         break;
@@ -912,6 +974,28 @@ public class FirewallService extends VpnService {
                         if (pendingEntries.get(key) == item) {
                             pendingEntries.remove(key);
                         }
+                    }
+                }
+
+                if (!overflowByUid.isEmpty() && batch.size() < 100) {
+                    for (Iterator<Map.Entry<Integer, UidOverflow>> it = overflowByUid.entrySet().iterator(); it.hasNext(); ) {
+                        if (batch.size() >= 100) {
+                            break;
+                        }
+                        UidOverflow of = it.next().getValue();
+                        it.remove();
+                        Packet op = new Packet();
+                        op.uid = of.uid;
+                        op.time = of.lastTimestamp;
+                        op.version = 4;
+                        op.protocol = 6;
+                        op.saddr = "";
+                        op.sport = 0;
+                        op.daddr = of.sampleDestinations.isEmpty() ? "overflow" : of.sampleDestinations.get(0);
+                        op.dport = 0;
+                        op.data = "overflow: +" + of.count + " dests [" + String.join(", ", of.sampleDestinations) + "]";
+                        op.allowed = false;
+                        batch.add(new AegisDatabase.LogBatchItem(op, null, of.count, of.interactive));
                     }
                 }
             }
