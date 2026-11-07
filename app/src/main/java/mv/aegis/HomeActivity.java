@@ -436,6 +436,7 @@ public class HomeActivity extends BaseActivity {
         super.onResume();
         LocalBroadcastManager.getInstance(this)
                 .registerReceiver(onRulesChanged, new IntentFilter(ACTION_RULES_CHANGED));
+        updateApplicationList(null);
         updateStatCards();
         updateThreatCard();
     }
