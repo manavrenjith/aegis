@@ -96,7 +96,7 @@ public class AppDetailActivity extends BaseActivity {
         executor.execute(() -> {
             FirewallRule foundRule = null;
             try {
-                List<FirewallRule> rules = FirewallRule.getRules(false, this);
+                List<FirewallRule> rules = FirewallRule.getRules(true, this);
                 for (FirewallRule firewallRule : rules) {
                     if (firewallRule.uid == uid) {
                         foundRule = firewallRule;
@@ -108,9 +108,6 @@ public class AppDetailActivity extends BaseActivity {
                 handler.post(() -> {
                     rule = finalFoundRule;
                     bindRuleToUI();
-                    if (rule == null && AegisUtils.isCloneUid(uid)) {
-                        Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
-                    }
                 });
             } catch (Throwable throwable) {
                 Log.e(TAG, "Failed to load app rule", throwable);
