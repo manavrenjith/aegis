@@ -25,11 +25,14 @@ import android.util.Log;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -91,6 +94,7 @@ public class FirewallService extends VpnService {
     private volatile boolean tunnelStillRunning = false;
     private ThreatDetector threatDetector;
     private final ConcurrentHashMap<String, Integer> recentDomainUid = new ConcurrentHashMap<>();
+    private final Set<Integer> seenCloneUids = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private volatile boolean isInteractive = true;
     private BroadcastReceiver screenReceiver = null;
@@ -490,6 +494,17 @@ public class FirewallService extends VpnService {
             }
         }, "AegisThreatLoad").start();
 
+        SharedPreferences clonePrefs = getSharedPreferences("clones", Context.MODE_PRIVATE);
+        Set<String> savedClones = clonePrefs.getStringSet("uids", null);
+        if (savedClones != null) {
+            for (String s : savedClones) {
+                try {
+                    seenCloneUids.add(Integer.parseInt(s));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         isInteractive = (pm != null && pm.isInteractive());
         screenReceiver = new BroadcastReceiver() {
@@ -860,6 +875,22 @@ public class FirewallService extends VpnService {
                     matchedRule = rule;
                     break;
                 }
+            }
+        }
+
+        if (matchedRule == null && packet.uid >= 100000 && (packet.uid % 100000) >= 10000) {
+            if (seenCloneUids.add(packet.uid)) {
+                final int cloneUid = packet.uid;
+                new Thread(() -> {
+                    try {
+                        SharedPreferences sp = getSharedPreferences("clones", Context.MODE_PRIVATE);
+                        Set<String> set = new HashSet<>(sp.getStringSet("uids", Collections.emptySet()));
+                        set.add(String.valueOf(cloneUid));
+                        sp.edit().putStringSet("uids", set).apply();
+                    } catch (Throwable t) {
+                        Log.e(TAG, "Failed to persist clone uid " + cloneUid, t);
+                    }
+                }, "AegisCloneUidPersist").start();
             }
         }
 
