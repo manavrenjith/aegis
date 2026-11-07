@@ -150,6 +150,7 @@ public class FirewallService extends VpnService {
     private final AtomicLong droppedCount = new AtomicLong(0);
     private final AtomicLong unresolvedUidCount = new AtomicLong(0);
     private final AtomicLong overflowCount = new AtomicLong(0);
+    private final AtomicLong lostCount = new AtomicLong(0);
     private volatile long lastStatsWarnTime = 0;
 
     private Thread logBatchThread = null;
@@ -828,8 +829,9 @@ public class FirewallService extends VpnService {
             long dropped = droppedCount.get();
             long unresolved = unresolvedUidCount.get();
             long overflow = overflowCount.get();
-            if (merged > 0 || dropped > 0 || unresolved > 0 || overflow > 0) {
-                Log.w(TAG, "Log queue stats: merged=" + merged + ", dropped=" + dropped + ", unresolved_uid=" + unresolved + ", overflow=" + overflow);
+            long lost = lostCount.get();
+            if (merged > 0 || dropped > 0 || unresolved > 0 || overflow > 0 || lost > 0) {
+                Log.w(TAG, "Log queue stats: merged=" + merged + ", dropped=" + dropped + ", unresolved_uid=" + unresolved + ", overflow=" + overflow + ", lost=" + lost);
                 lastStatsWarnTime = now;
             }
         }
@@ -861,9 +863,11 @@ public class FirewallService extends VpnService {
             item.rr.Time = now;
         }
 
-        int uid = getBatchItemUid(item);
-        if (uid < 0) {
-            unresolvedUidCount.incrementAndGet();
+        if (item.rr == null) {
+            int uid = getBatchItemUid(item);
+            if (uid < 0) {
+                unresolvedUidCount.incrementAndGet();
+            }
         }
 
         UidDestKey key = getBatchItemKey(item);
@@ -1003,8 +1007,14 @@ public class FirewallService extends VpnService {
             if (!batch.isEmpty()) {
                 try {
                     AegisDatabase.getInstance(this).insertBatch(batch);
-                } catch (Throwable t) {
-                    Log.e(TAG, "Failed to flush log batch", t);
+                } catch (Throwable firstAttempt) {
+                    Log.w(TAG, "insertBatch failed, retrying once", firstAttempt);
+                    try {
+                        AegisDatabase.getInstance(this).insertBatch(batch);
+                    } catch (Throwable secondAttempt) {
+                        Log.e(TAG, "insertBatch retry failed, items lost", secondAttempt);
+                        lostCount.addAndGet(batch.size());
+                    }
                 }
                 batch.clear();
             }
