@@ -84,6 +84,7 @@ public class FirewallService extends VpnService {
     private static Object jni_lock = new Object();
     private static long jni_context = 0;
     private Thread tunnelThread = null;
+    private volatile boolean tunnelStillRunning = false;
     private ThreatDetector threatDetector;
     private final ConcurrentHashMap<String, Integer> recentDomainUid = new ConcurrentHashMap<>();
 
@@ -331,7 +332,13 @@ public class FirewallService extends VpnService {
                 tunnelThread.join(2000);
             } catch (InterruptedException ignored) {
             }
-            tunnelThread = null;
+            if (tunnelThread.isAlive()) {
+                Log.e(TAG, "tunnelThread still alive after join");
+                tunnelStillRunning = true;
+            } else {
+                tunnelThread = null;
+                tunnelStillRunning = false;
+            }
         }
 
         if (state == State.enforcing && !temporary) {
@@ -462,29 +469,21 @@ public class FirewallService extends VpnService {
         super.onRevoke();
     }
 
-    @Override
-    public void onDestroy() {
+    private void teardown() {
         stop(false);
 
-        if (tunnelThread != null) {
+        if (tunnelThread != null && tunnelThread.isAlive()) {
             try {
                 tunnelThread.join(2000);
             } catch (InterruptedException ignored) {
             }
-            tunnelThread = null;
-        }
-
-        if (commandLooper != null) {
-            commandLooper.quitSafely();
-            commandLooper = null;
-        }
-
-        if (screenReceiver != null) {
-            try {
-                unregisterReceiver(screenReceiver);
-            } catch (Exception ignored) {
+            if (tunnelThread.isAlive()) {
+                Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
+                tunnelStillRunning = true;
+            } else {
+                tunnelThread = null;
+                tunnelStillRunning = false;
             }
-            screenReceiver = null;
         }
 
         logBatchRunning = false;
@@ -502,10 +501,32 @@ public class FirewallService extends VpnService {
 
         synchronized (jni_lock) {
             if (jni_context != 0) {
-                jni_done(jni_context);
-                jni_context = 0;
+                if (tunnelStillRunning || (tunnelThread != null && tunnelThread.isAlive())) {
+                    Log.w(TAG, "tunnel thread is still alive; leaking native context to prevent crash");
+                } else {
+                    jni_done(jni_context);
+                    jni_context = 0;
+                }
             }
         }
+
+        if (commandLooper != null) {
+            commandLooper.quitSafely();
+            commandLooper = null;
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        if (screenReceiver != null) {
+            try {
+                unregisterReceiver(screenReceiver);
+            } catch (Exception ignored) {
+            }
+            screenReceiver = null;
+        }
+
+        new Thread(this::teardown, "FirewallTeardown").start();
 
         super.onDestroy();
     }
