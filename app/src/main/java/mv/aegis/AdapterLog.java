@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -66,20 +67,27 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         long time = cursor.getLong(cursor.getColumnIndexOrThrow("time"));
         int allowed = cursor.getInt(cursor.getColumnIndexOrThrow("allowed"));
 
-        String appName;
-        if (isNullUid || uid < 0) {
-            appName = "Unknown app";
-        } else {
-            List<String> names = AegisUtils.getApplicationNames(uid, context);
-            if (!names.isEmpty()) {
-                appName = TextUtils.join(", ", names);
-            } else if (AegisUtils.isCloneUid(uid)) {
-                appName = "UID:" + (uid % 100000) + AegisUtils.cloneSuffix(uid, context);
+        try {
+            String appName;
+            if (isNullUid || uid < 0) {
+                appName = "Unknown app";
             } else {
-                appName = "UID:" + uid;
+                List<String> names = AegisUtils.getApplicationNames(uid, context);
+                if (!names.isEmpty()) {
+                    appName = TextUtils.join(", ", names);
+                } else if (AegisUtils.isCloneUid(uid)) {
+                    appName = "UID:" + (uid % 100000) + AegisUtils.cloneSuffix(uid, context);
+                } else {
+                    appName = "UID:" + uid;
+                }
             }
+            holder.tvAppName.setText(appName);
+            holder.ivAppIcon.setImageDrawable(resolveIcon(uid));
+        } catch (Throwable t) {
+            Log.w("AdapterLog", "Failed to resolve name or icon for uid=" + uid, t);
+            holder.tvAppName.setText("UID:" + uid);
+            holder.ivAppIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
         }
-        holder.tvAppName.setText(appName);
 
         holder.tvTimestamp.setText(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(time));
@@ -100,7 +108,7 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
                     : ContextCompat.getColor(context, R.color.color_off)));
         }
 
-        holder.ivAppIcon.setImageDrawable(resolveIcon(uid));
+
     }
 
     @Override
