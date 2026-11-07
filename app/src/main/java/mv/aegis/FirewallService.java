@@ -5,12 +5,10 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.database.sqlite.SQLiteDatabase;
 import android.net.ConnectivityManager;
 import android.net.VpnService;
 import android.net.VpnService.Builder;
@@ -767,16 +765,7 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        ContentValues cv = new ContentValues();
-        cv.put("time", rr.Time);
-        cv.put("qname", rr.QName);
-        cv.put("aname", rr.AName);
-        cv.put("resource", rr.Resource);
-        cv.put("ttl", rr.TTL);
-        cv.put("uid", rr.uid);
-
-        SQLiteDatabase db = AegisDatabase.getInstance(this).getWritableDatabase();
-        db.insertWithOnConflict("dns", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+        AegisDatabase.getInstance(this).insertDns(rr);
 
         // Best-effort domain -> uid attribution for threat logging (Feature 1/4).
         // uid is real in the TLS SNI path (ip.c) and -1 in the DNS-answer path (dns.c).

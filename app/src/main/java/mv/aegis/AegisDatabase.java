@@ -904,6 +904,27 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
+    public void insertDns(ResourceRecord rr) {
+        if (rr == null) {
+            return;
+        }
+
+        ContentValues cv = new ContentValues();
+        cv.put("time", rr.Time);
+        cv.put("qname", rr.QName);
+        cv.put("aname", rr.AName);
+        cv.put("resource", rr.Resource);
+        cv.put("ttl", rr.TTL);
+        cv.put("uid", rr.uid);
+
+        lock.writeLock().lock();
+        try {
+            getWritableDatabase().insertWithOnConflict("dns", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public String getQName(int uid, String ip) {
         lock.readLock().lock();
         SQLiteStatement statement = null;
