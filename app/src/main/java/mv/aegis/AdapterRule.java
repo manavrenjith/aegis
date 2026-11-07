@@ -98,7 +98,16 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
             executor.execute(() -> {
                 Drawable icon;
                 try {
-                    icon = context.getPackageManager().getApplicationIcon(rule.packageName);
+                    String pkg = rule.packageName;
+                    if (pkg != null && pkg.startsWith("clone:")) {
+                        String[] pkgs = context.getPackageManager().getPackagesForUid(rule.uid % 100000);
+                        pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
+                    }
+                    if (pkg != null) {
+                        icon = context.getPackageManager().getApplicationIcon(pkg);
+                    } else {
+                        icon = ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp);
+                    }
                 } catch (Throwable throwable) {
                     Log.e(TAG, "Failed to load app icon: " + rule.packageName, throwable);
                     icon = ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp);
@@ -238,9 +247,16 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
         if (ibSettings != null) {
             ibSettings.setOnClickListener(v -> {
                 try {
-                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                    intent.setData(Uri.fromParts("package", rule.packageName, null));
-                    context.startActivity(intent);
+                    String pkg = rule.packageName;
+                    if (pkg != null && pkg.startsWith("clone:")) {
+                        String[] pkgs = context.getPackageManager().getPackagesForUid(rule.uid % 100000);
+                        pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
+                    }
+                    if (pkg != null) {
+                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                        intent.setData(Uri.fromParts("package", pkg, null));
+                        context.startActivity(intent);
+                    }
                 } catch (Throwable throwable) {
                     Log.e(TAG, "Failed to open app settings", throwable);
                 }
@@ -249,8 +265,13 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
 
         if (ibLaunch != null) {
             Intent launchIntent = null;
-            if (!TextUtils.isEmpty(rule.packageName)) {
-                launchIntent = context.getPackageManager().getLaunchIntentForPackage(rule.packageName);
+            String pkg = rule.packageName;
+            if (pkg != null && pkg.startsWith("clone:")) {
+                String[] pkgs = context.getPackageManager().getPackagesForUid(rule.uid % 100000);
+                pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
+            }
+            if (!TextUtils.isEmpty(pkg)) {
+                launchIntent = context.getPackageManager().getLaunchIntentForPackage(pkg);
             }
             if (launchIntent != null) {
                 Intent finalLaunchIntent = launchIntent;

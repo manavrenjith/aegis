@@ -35,6 +35,9 @@ public final class AegisUtils {
     }
 
     public static boolean isSystem(String packageName, Context context) {
+        if (packageName != null && packageName.startsWith("clone:")) {
+            return false;
+        }
         try {
             PackageManager pm = context.getPackageManager();
             PackageInfo info = pm.getPackageInfo(packageName, 0);
@@ -59,6 +62,13 @@ public final class AegisUtils {
     }
 
     public static boolean hasInternet(String packageName, Context context) {
+        if (packageName != null && packageName.startsWith("clone:")) {
+            try {
+                int uid = Integer.parseInt(packageName.substring(6));
+                return hasInternet(uid % 100000, context);
+            } catch (NumberFormatException ignored) {
+            }
+        }
         PackageManager pm = context.getPackageManager();
         return (pm.checkPermission("android.permission.INTERNET", packageName)
                 == PackageManager.PERMISSION_GRANTED);

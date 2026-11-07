@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class FirewallRule {
 
@@ -166,6 +167,24 @@ public class FirewallRule {
 			internet = true;
 			enabled = true;
 			pkg = false;
+		} else if (this.packageName != null && this.packageName.startsWith("clone:")) {
+			name = (info.applicationInfo != null && info.applicationInfo.nonLocalizedLabel != null)
+					? info.applicationInfo.nonLocalizedLabel.toString()
+					: ("UID:" + uid);
+			system = false;
+			boolean hasNet = true;
+			if (info.requestedPermissions != null) {
+				hasNet = false;
+				for (String perm : info.requestedPermissions) {
+					if ("android.permission.INTERNET".equals(perm)) {
+						hasNet = true;
+						break;
+					}
+				}
+			}
+			internet = hasNet;
+			enabled = true;
+			pkg = true;
 		} else {
 			Cursor cursor = null;
 			try {
@@ -276,6 +295,56 @@ public class FirewallRule {
 			nobody.versionName = Build.VERSION.RELEASE;
 			nobody.applicationInfo.icon = 0;
 			listPI.add(nobody);
+
+			SharedPreferences clonePrefs = appContext.getSharedPreferences("clones", Context.MODE_PRIVATE);
+			Set<String> cloneUids = clonePrefs.getStringSet("uids", Collections.emptySet());
+			List<PackageInfo> listClones = new ArrayList<>();
+			if (cloneUids != null) {
+				for (String uidStr : cloneUids) {
+					try {
+						int cloneUid = Integer.parseInt(uidStr);
+						if (cloneUid < 100000 || (cloneUid % 100000) < 10000) {
+							continue;
+						}
+						int appId = cloneUid % 100000;
+						int userN = cloneUid / 100000;
+
+						PackageInfo basePi = null;
+						for (PackageInfo pi : listPI) {
+							if (pi.applicationInfo != null && pi.applicationInfo.uid == appId) {
+								basePi = pi;
+								break;
+							}
+						}
+
+						PackageInfo clonePi = new PackageInfo();
+						clonePi.packageName = "clone:" + cloneUid;
+						clonePi.applicationInfo = new ApplicationInfo();
+						clonePi.applicationInfo.uid = cloneUid;
+
+						String baseLabel = null;
+						if (basePi != null) {
+							clonePi.versionName = basePi.versionName;
+							clonePi.versionCode = basePi.versionCode;
+							clonePi.requestedPermissions = basePi.requestedPermissions;
+							if (basePi.applicationInfo != null) {
+								clonePi.applicationInfo.icon = basePi.applicationInfo.icon;
+								baseLabel = getLabel(basePi, appContext);
+							}
+						}
+						if (baseLabel == null) {
+							baseLabel = "UID:" + appId;
+						}
+
+						String cloneLabel = baseLabel + " (clone, user " + userN + ")";
+						clonePi.applicationInfo.nonLocalizedLabel = cloneLabel;
+						listClones.add(clonePi);
+					} catch (Throwable ex) {
+						Log.e("Aegis.Rule", "Error processing clone uid " + uidStr + ": " + ex.getMessage(), ex);
+					}
+				}
+			}
+			listPI.addAll(listClones);
 
 			List<FirewallRule> listRules = new ArrayList<>();
 
