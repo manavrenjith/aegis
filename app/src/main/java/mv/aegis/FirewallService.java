@@ -93,6 +93,7 @@ public class FirewallService extends VpnService {
 
     private volatile boolean isInteractive = true;
     private BroadcastReceiver screenReceiver = null;
+    private volatile boolean destroyed = false;
 
     private static final class UidDestKey {
         final int uid;
@@ -202,6 +203,10 @@ public class FirewallService extends VpnService {
         }
 
         private void handleIntent(Intent intent) {
+            if (destroyed) {
+                Log.d(TAG, "handleIntent: service is destroyed, skipping");
+                return;
+            }
             Log.d(TAG, "handleIntent command=" + getCommand(intent));
              Command command = getCommand(intent);
              if (command == null) {
@@ -232,6 +237,11 @@ public class FirewallService extends VpnService {
     }
 
     private void start() {
+        if (destroyed) {
+            Log.d(TAG, "start(): service is destroyed, aborting");
+            return;
+        }
+
         Log.d(TAG, "start() BEGIN");
 
         CountDownLatch priorTeardown = activeTeardownLatch;
@@ -244,6 +254,11 @@ public class FirewallService extends VpnService {
             } catch (InterruptedException e) {
                 Log.w(TAG, "Interrupted while waiting for prior teardown", e);
             }
+        }
+
+        if (destroyed) {
+            Log.d(TAG, "start(): service was destroyed during latch wait, aborting");
+            return;
         }
 
         synchronized (jni_lock) {
@@ -280,6 +295,12 @@ public class FirewallService extends VpnService {
         } catch (Exception e) {
             Log.e(TAG, "Failed to exclude self from VPN", e);
         }
+
+        if (destroyed) {
+            Log.d(TAG, "start(): service was destroyed before establish, aborting");
+            return;
+        }
+
         Log.d(TAG, "jni_start called, context=" + jni_context);
         jni_start(jni_context, com.mv.aegis.BuildConfig.DEBUG ? Log.DEBUG : Log.WARN);
 
@@ -316,30 +337,46 @@ public class FirewallService extends VpnService {
         boolean default_allow_roaming = !whitelist_roaming;
         Log.d(TAG, "start() - Setting default policy: wifi=" + default_allow_wifi + " other=" + default_allow_other + " roaming=" + default_allow_roaming);
 
+        if (destroyed) {
+            Log.d(TAG, "start(): service was destroyed before starting tunnel thread, aborting");
+            return;
+        }
 
         if (tunnelThread != null && tunnelThread.isAlive()) {
             return;
         }
 
+        long threadContext;
+        synchronized (jni_lock) {
+            threadContext = jni_context;
+        }
+        ParcelFileDescriptor threadTunFd = tunFd;
+        if (threadContext == 0 || threadTunFd == null || !threadTunFd.getFileDescriptor().valid()) {
+            Log.w(TAG, "Cannot start tunnel thread: invalid threadContext=" + threadContext + " or threadTunFd=" + threadTunFd);
+            return;
+        }
+
         tunnelThread = new Thread(() -> {
-            if (tunFd == null || !tunFd.getFileDescriptor().valid()) {
-                Log.w(TAG, "jni_run skipped: tunFd is null or closed");
-                return;
-            }
-            int tun = tunFd.getFd();
+            int tun = threadTunFd.getFd();
             Log.d(TAG, "jni_run called, tun=" + tun);
-            jni_run(jni_context, tun, false, 3);
+            jni_run(threadContext, tun, false, 3);
         }, "FirewallTunnel");
         tunnelThread.start();
     }
 
     private void reload(boolean interactive) {
+        if (destroyed) {
+            return;
+        }
         currentRules = FirewallRule.getRules(false, this);
         Log.d(TAG, "reload() - Reloaded firewall rules: " + (currentRules == null ? 0 : currentRules.size()));
 
     }
 
     private void stop(boolean temporary) {
+        if (destroyed) {
+            return;
+        }
         if (vpn != null) {
             jni_stop(jni_context);
             try {
@@ -563,6 +600,7 @@ public class FirewallService extends VpnService {
 
     @Override
     public void onDestroy() {
+        destroyed = true;
         if (screenReceiver != null) {
             try {
                 unregisterReceiver(screenReceiver);
