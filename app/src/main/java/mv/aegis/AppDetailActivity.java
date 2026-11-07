@@ -10,6 +10,7 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.ActionBar;
@@ -107,6 +108,9 @@ public class AppDetailActivity extends BaseActivity {
                 handler.post(() -> {
                     rule = finalFoundRule;
                     bindRuleToUI();
+                    if (rule == null && uid >= 100000 && (uid % 100000) >= 10000) {
+                        Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
+                    }
                 });
             } catch (Throwable throwable) {
                 Log.e(TAG, "Failed to load app rule", throwable);
@@ -160,6 +164,9 @@ public class AppDetailActivity extends BaseActivity {
         }
         ibWifi.setOnClickListener(v -> {
             if (rule == null) {
+                if (uid >= 100000 && (uid % 100000) >= 10000) {
+                    Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
+                }
                 return;
             }
             rule.wifi_blocked = !rule.wifi_blocked;
@@ -176,6 +183,9 @@ public class AppDetailActivity extends BaseActivity {
         }
         ibOther.setOnClickListener(v -> {
             if (rule == null) {
+                if (uid >= 100000 && (uid % 100000) >= 10000) {
+                    Toast.makeText(this, "Open the app once more and retry", Toast.LENGTH_SHORT).show();
+                }
                 return;
             }
             rule.other_blocked = !rule.other_blocked;
