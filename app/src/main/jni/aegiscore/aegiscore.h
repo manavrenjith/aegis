@@ -75,12 +75,16 @@
 #define SOCKS5_CONNECT 4
 #define SOCKS5_CONNECTED 5
 
+struct uid_cache_entry;
+
 struct context {
     pthread_mutex_t lock;
     int pipefds[2];
     int stopping;
     int sdk;
     struct ng_session *ng_session;
+    int uid_cache_size;
+    struct uid_cache_entry *uid_cache;
 };
 
 struct arguments {
@@ -490,11 +494,11 @@ uint8_t char2nible(const char c);
 
 void hex2bytes(const char *hex, uint8_t *buffer);
 
-jint get_uid(const int version, const int protocol,
+jint get_uid(struct context *ctx, const int version, const int protocol,
              const void *saddr, const uint16_t sport,
              const void *daddr, const uint16_t dport);
 
-jint get_uid_sub(const int version, const int protocol,
+jint get_uid_sub(struct context *ctx, const int version, const int protocol,
                  const void *saddr, const uint16_t sport,
                  const void *daddr, const uint16_t dport,
                  const char *source, const char *dest,

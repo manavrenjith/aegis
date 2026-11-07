@@ -14,9 +14,6 @@ extern FILE *pcap_file;
 extern size_t pcap_record_size;
 extern long pcap_file_size;
 
-extern int uid_cache_size;
-extern struct uid_cache_entry *uid_cache;
-
 // JNI
 
 jclass clsPacket;
@@ -191,10 +188,10 @@ Java_mv_aegis_FirewallService_jni_1done(
         if (close(ctx->pipefds[i]))
             log_android(ANDROID_LOG_ERROR, "Close pipe error %d: %s", errno, strerror(errno));
 
-    if (uid_cache != NULL)
-        ng_free(uid_cache, __FILE__, __LINE__);
-    uid_cache_size = 0;
-    uid_cache = NULL;
+    if (ctx->uid_cache != NULL)
+        ng_free(ctx->uid_cache, __FILE__, __LINE__);
+    ctx->uid_cache_size = 0;
+    ctx->uid_cache = NULL;
 
     ng_free(ctx, __FILE__, __LINE__);
 }

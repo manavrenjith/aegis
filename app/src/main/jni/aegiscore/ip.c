@@ -314,7 +314,7 @@ void handle_ip(const struct arguments *args,
                 uid = session->tcp.uid;
             } else {
                 if (args->ctx->sdk <= 28) // Android 9 Pie
-                    uid = get_uid(version, protocol, saddr, sport, daddr, dport);
+                    uid = get_uid(args->ctx, version, protocol, saddr, sport, daddr, dport);
                 else
                     uid = get_uid_q(args, version, protocol, source, sport, dest, dport);
             }
@@ -330,7 +330,7 @@ void handle_ip(const struct arguments *args,
         (protocol == IPPROTO_UDP && !has_udp_session(args, pkt, payload)) ||
         (protocol == IPPROTO_TCP && syn)) {
         if (args->ctx->sdk <= 28) // Android 9 Pie
-            uid = get_uid(version, protocol, saddr, sport, daddr, dport);
+            uid = get_uid(args->ctx, version, protocol, saddr, sport, daddr, dport);
         else
             uid = get_uid_q(args, version, protocol, source, sport, dest, dport);
     }
@@ -385,7 +385,7 @@ void handle_ip(const struct arguments *args,
     }
 }
 
-jint get_uid(const int version, const int protocol,
+jint get_uid(struct context *ctx, const int version, const int protocol,
              const void *saddr, const uint16_t sport,
              const void *daddr, const uint16_t dport) {
     jint uid = -1;
@@ -413,13 +413,13 @@ jint get_uid(const int version, const int protocol,
         daddr128[11] = (uint8_t) 0xFF;
         memcpy(daddr128 + 12, daddr, 4);
 
-        uid = get_uid_sub(6, protocol, saddr128, sport, daddr128, dport, source, dest, now);
+        uid = get_uid_sub(ctx, 6, protocol, saddr128, sport, daddr128, dport, source, dest, now);
         log_android(ANDROID_LOG_DEBUG, "uid v%d p%d %s/%u > %s/%u => %d as inet6",
                     version, protocol, source, sport, dest, dport, uid);
     }
 
     if (uid == -1) {
-        uid = get_uid_sub(version, protocol, saddr, sport, daddr, dport, source, dest, now);
+        uid = get_uid_sub(ctx, version, protocol, saddr, sport, daddr, dport, source, dest, now);
         log_android(ANDROID_LOG_DEBUG, "uid v%d p%d %s/%u > %s/%u => %d fallback",
                     version, protocol, source, sport, dest, dport, uid);
     }
@@ -434,10 +434,7 @@ jint get_uid(const int version, const int protocol,
     return uid;
 }
 
-int uid_cache_size = 0;
-struct uid_cache_entry *uid_cache = NULL;
-
-jint get_uid_sub(const int version, const int protocol,
+jint get_uid_sub(struct context *ctx, const int version, const int protocol,
                  const void *saddr, const uint16_t sport,
                  const void *daddr, const uint16_t dport,
                  const char *source, const char *dest,
@@ -451,21 +448,21 @@ jint get_uid_sub(const int version, const int protocol,
     int ws = (version == 4 ? 1 : 4);
 
     // Check cache
-    for (int i = 0; i < uid_cache_size; i++)
-        if (now - uid_cache[i].time <= UID_MAX_AGE &&
-            uid_cache[i].version == version &&
-            uid_cache[i].protocol == protocol &&
-            uid_cache[i].sport == sport &&
-            (uid_cache[i].dport == dport || uid_cache[i].dport == 0) &&
-            (memcmp(uid_cache[i].saddr, saddr, (size_t) (ws * 4)) == 0 ||
-             memcmp(uid_cache[i].saddr, zero, (size_t) (ws * 4)) == 0) &&
-            (memcmp(uid_cache[i].daddr, daddr, (size_t) (ws * 4)) == 0 ||
-             memcmp(uid_cache[i].daddr, zero, (size_t) (ws * 4)) == 0)) {
+    for (int i = 0; i < ctx->uid_cache_size; i++)
+        if (now - ctx->uid_cache[i].time <= UID_MAX_AGE &&
+            ctx->uid_cache[i].version == version &&
+            ctx->uid_cache[i].protocol == protocol &&
+            ctx->uid_cache[i].sport == sport &&
+            (ctx->uid_cache[i].dport == dport || ctx->uid_cache[i].dport == 0) &&
+            (memcmp(ctx->uid_cache[i].saddr, saddr, (size_t) (ws * 4)) == 0 ||
+             memcmp(ctx->uid_cache[i].saddr, zero, (size_t) (ws * 4)) == 0) &&
+            (memcmp(ctx->uid_cache[i].daddr, daddr, (size_t) (ws * 4)) == 0 ||
+             memcmp(ctx->uid_cache[i].daddr, zero, (size_t) (ws * 4)) == 0)) {
 
             log_android(ANDROID_LOG_INFO, "uid v%d p%d %s/%u > %s/%u => %d (from cache)",
-                        version, protocol, source, sport, dest, dport, uid_cache[i].uid);
+                        version, protocol, source, sport, dest, dport, ctx->uid_cache[i].uid);
 
-            return uid_cache[i].uid;
+            return ctx->uid_cache[i].uid;
         }
 
     // Get proc file name
@@ -541,29 +538,29 @@ jint get_uid_sub(const int version, const int protocol,
                  memcmp(_daddr, zero, (size_t) (ws * 4)) == 0))
                 uid = _uid;
 
-            for (; c < uid_cache_size; c++)
-                if (now - uid_cache[c].time > UID_MAX_AGE)
+            for (; c < ctx->uid_cache_size; c++)
+                if (now - ctx->uid_cache[c].time > UID_MAX_AGE)
                     break;
 
-            if (c >= uid_cache_size) {
-                if (uid_cache_size == 0)
-                    uid_cache = ng_malloc(sizeof(struct uid_cache_entry), "uid_cache init");
+            if (c >= ctx->uid_cache_size) {
+                if (ctx->uid_cache_size == 0)
+                    ctx->uid_cache = ng_malloc(sizeof(struct uid_cache_entry), "uid_cache init");
                 else
-                    uid_cache = ng_realloc(uid_cache,
+                    ctx->uid_cache = ng_realloc(ctx->uid_cache,
                                            sizeof(struct uid_cache_entry) *
-                                           (uid_cache_size + 1), "uid_cache extend");
-                c = uid_cache_size;
-                uid_cache_size++;
+                                           (ctx->uid_cache_size + 1), "uid_cache extend");
+                c = ctx->uid_cache_size;
+                ctx->uid_cache_size++;
             }
 
-            uid_cache[c].version = (uint8_t) version;
-            uid_cache[c].protocol = (uint8_t) protocol;
-            memcpy(uid_cache[c].saddr, _saddr, (size_t) (ws * 4));
-            uid_cache[c].sport = (uint16_t) _sport;
-            memcpy(uid_cache[c].daddr, _daddr, (size_t) (ws * 4));
-            uid_cache[c].dport = (uint16_t) _dport;
-            uid_cache[c].uid = _uid;
-            uid_cache[c].time = now;
+            ctx->uid_cache[c].version = (uint8_t) version;
+            ctx->uid_cache[c].protocol = (uint8_t) protocol;
+            memcpy(ctx->uid_cache[c].saddr, _saddr, (size_t) (ws * 4));
+            ctx->uid_cache[c].sport = (uint16_t) _sport;
+            memcpy(ctx->uid_cache[c].daddr, _daddr, (size_t) (ws * 4));
+            ctx->uid_cache[c].dport = (uint16_t) _dport;
+            ctx->uid_cache[c].uid = _uid;
+            ctx->uid_cache[c].time = now;
         } else {
             log_android(ANDROID_LOG_ERROR, "Invalid field #%d: %s", fields, line);
             uid = -2;
