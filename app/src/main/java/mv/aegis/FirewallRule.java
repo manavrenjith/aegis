@@ -460,7 +460,7 @@ public class FirewallRule {
 				listRules.clear();
 				for (FirewallRule r : nonCloneRules) {
 					listRules.add(r);
-					List<FirewallRule> matchedClones = clonesByBaseUid.get(r.uid);
+					List<FirewallRule> matchedClones = clonesByBaseUid.remove(r.uid);
 					if (matchedClones != null) {
 						listRules.addAll(matchedClones);
 					}
