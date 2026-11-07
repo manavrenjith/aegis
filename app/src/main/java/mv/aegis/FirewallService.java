@@ -1019,14 +1019,16 @@ public class FirewallService extends VpnService {
                         Packet op = new Packet();
                         op.uid = of.uid;
                         op.time = of.lastTimestamp;
-                        op.version = 4;
-                        op.protocol = 6;
+                        op.version = 0;
+                        op.protocol = 0;
                         op.saddr = "";
                         op.sport = 0;
-                        op.daddr = of.sampleDestinations.isEmpty() ? "overflow" : of.sampleDestinations.get(0);
+                        op.daddr = "";
                         op.dport = 0;
-                        op.data = "overflow: +" + of.count + " dests [" + String.join(", ", of.sampleDestinations) + "]";
+                        op.flags = "OVERFLOW";
+                        op.data = of.count + " more destinations [" + String.join(", ", of.sampleDestinations) + "]";
                         op.allowed = false;
+                        op.status = Packet.STATUS_OVERFLOW;
                         batch.add(new AegisDatabase.LogBatchItem(op, null, of.count, of.interactive));
                     }
                 }

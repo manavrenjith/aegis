@@ -68,18 +68,24 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         String appName = names.isEmpty() ? ("UID:" + uid) : TextUtils.join(", ", names);
         holder.tvAppName.setText(appName);
 
-        String domain = !TextUtils.isEmpty(dname) ? dname : daddr;
-        if (dport > 0) {
-            domain = domain + ":" + dport;
-        }
-        holder.tvDomain.setText(domain);
-
         holder.tvTimestamp.setText(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                 .format(time));
 
-        holder.vDot.setBackground(buildDot(allowed == 1
-                ? ContextCompat.getColor(context, R.color.color_on)
-                : ContextCompat.getColor(context, R.color.color_off)));
+        if (allowed == Packet.STATUS_OVERFLOW) {
+            int count = cursor.getInt(cursor.getColumnIndexOrThrow("connection"));
+            holder.tvDomain.setText(count + " more destinations");
+            holder.vDot.setBackground(buildDot(ContextCompat.getColor(context, R.color.color_label_tertiary)));
+        } else {
+            String domain = !TextUtils.isEmpty(dname) ? dname : daddr;
+            if (dport > 0) {
+                domain = domain + ":" + dport;
+            }
+            holder.tvDomain.setText(domain);
+
+            holder.vDot.setBackground(buildDot(allowed == 1
+                    ? ContextCompat.getColor(context, R.color.color_on)
+                    : ContextCompat.getColor(context, R.color.color_off)));
+        }
 
         holder.ivAppIcon.setImageDrawable(resolveIcon(uid));
     }

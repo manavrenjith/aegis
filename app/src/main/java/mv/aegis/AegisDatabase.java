@@ -422,7 +422,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
         cv.put("dname", dname);
         cv.put("data", packet.data);
         cv.put("uid", packet.uid >= 0 ? packet.uid : null);
-        cv.put("allowed", packet.allowed ? 1 : 0);
+        int allowedVal = packet.status >= 0 ? packet.status : (packet.allowed ? 1 : 0);
+        cv.put("allowed", allowedVal);
         cv.put("connection", connection);
         cv.put("interactive", interactive ? 1 : 0);
 
@@ -486,7 +487,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
             cv.put("dname", dname);
             cv.put("data", packet.data);
             cv.put("uid", packet.uid >= 0 ? packet.uid : null);
-            cv.put("allowed", packet.allowed ? 1 : 0);
+            int allowedVal = packet.status >= 0 ? packet.status : (packet.allowed ? 1 : 0);
+            cv.put("allowed", allowedVal);
             cv.put("connection", connection);
             cv.put("interactive", interactive ? 1 : 0);
             cv.put("threat_type", threatType);
@@ -870,6 +872,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             if (allowedFilter.isEmpty()) {
                 where.add("1 = 0");
             } else {
+                allowedFilter.add("allowed = 2");
                 where.add("(" + String.join(" OR ", allowedFilter) + ")");
             }
 
