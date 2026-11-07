@@ -120,11 +120,11 @@ public class AppDetailActivity extends BaseActivity {
             tvAppName.setText(rule.name);
         } else {
             List<String> names = AegisUtils.getApplicationNames(uid, this);
-            tvAppName.setText((names != null && !names.isEmpty()) ? names.get(0) : "Unknown");
+            tvAppName.setText((names != null && !names.isEmpty()) ? names.get(0) : "Unknown app");
         }
 
         TextView tvPackageName = findViewById(R.id.tvPackageName);
-        tvPackageName.setText(packageName == null ? "" : packageName);
+        tvPackageName.setText(packageName == null || "uid:-1".equals(packageName) ? (uid < 0 ? "Unknown" : "") : packageName);
 
         ImageView ivAppIcon = findViewById(R.id.ivAppIcon);
         final String iconPackage = packageName;
@@ -141,7 +141,7 @@ public class AppDetailActivity extends BaseActivity {
         });
 
         TextView tvUid = findViewById(R.id.tvUid);
-        tvUid.setText("UID: " + uid);
+        tvUid.setText(uid < 0 ? "UID: Unknown" : "UID: " + uid);
 
         TextView tvVersion = findViewById(R.id.tvVersion);
         tvVersion.setText(rule != null && rule.version != null ? "v" + rule.version : "");
