@@ -95,6 +95,7 @@ public class FirewallService extends VpnService {
     private ThreatDetector threatDetector;
     private final ConcurrentHashMap<String, Integer> recentDomainUid = new ConcurrentHashMap<>();
     private final Set<Integer> seenCloneUids = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Object clonePersistLock = new Object();
 
     private volatile boolean isInteractive = true;
     private BroadcastReceiver screenReceiver = null;
@@ -880,15 +881,18 @@ public class FirewallService extends VpnService {
 
         if (matchedRule == null && AegisUtils.isCloneUid(packet.uid)) {
             if (seenCloneUids.add(packet.uid)) {
-                final int cloneUid = packet.uid;
                 new Thread(() -> {
-                    try {
-                        SharedPreferences sp = getSharedPreferences("clones", Context.MODE_PRIVATE);
-                        Set<String> set = new HashSet<>(sp.getStringSet("uids", Collections.emptySet()));
-                        set.add(String.valueOf(cloneUid));
-                        sp.edit().putStringSet("uids", set).apply();
-                    } catch (Throwable t) {
-                        Log.e(TAG, "Failed to persist clone uid " + cloneUid, t);
+                    synchronized (clonePersistLock) {
+                        try {
+                            Set<String> snapshot = new HashSet<>();
+                            for (Integer u : seenCloneUids) {
+                                snapshot.add(String.valueOf(u));
+                            }
+                            SharedPreferences sp = getSharedPreferences("clones", Context.MODE_PRIVATE);
+                            sp.edit().putStringSet("uids", snapshot).apply();
+                        } catch (Throwable t) {
+                            Log.e(TAG, "Failed to persist clone uids", t);
+                        }
                     }
                 }, "AegisCloneUidPersist").start();
             }
