@@ -57,15 +57,22 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             return;
         }
 
-        int uid = cursor.getInt(cursor.getColumnIndexOrThrow("uid"));
+        int colUid = cursor.getColumnIndexOrThrow("uid");
+        boolean isNullUid = cursor.isNull(colUid);
+        int uid = isNullUid ? -1 : cursor.getInt(colUid);
         String daddr = cursor.getString(cursor.getColumnIndexOrThrow("daddr"));
         String dname = cursor.getString(cursor.getColumnIndexOrThrow("dname"));
         int dport = cursor.getInt(cursor.getColumnIndexOrThrow("dport"));
         long time = cursor.getLong(cursor.getColumnIndexOrThrow("time"));
         int allowed = cursor.getInt(cursor.getColumnIndexOrThrow("allowed"));
 
-        List<String> names = AegisUtils.getApplicationNames(uid, context);
-        String appName = names.isEmpty() ? ("UID:" + uid) : TextUtils.join(", ", names);
+        String appName;
+        if (isNullUid || uid < 0) {
+            appName = "Unknown app";
+        } else {
+            List<String> names = AegisUtils.getApplicationNames(uid, context);
+            appName = names.isEmpty() ? ("UID:" + uid) : TextUtils.join(", ", names);
+        }
         holder.tvAppName.setText(appName);
 
         holder.tvTimestamp.setText(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
