@@ -326,52 +326,113 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
+    public static class LogBatchItem {
+        public final Packet packet;
+        public final String dname;
+        public final int connection;
+        public final boolean interactive;
+        public final Usage usage;
+
+        public LogBatchItem(Packet packet, String dname, int connection, boolean interactive) {
+            this.packet = packet;
+            this.dname = dname;
+            this.connection = connection;
+            this.interactive = interactive;
+            this.usage = null;
+        }
+
+        public LogBatchItem(Usage usage, String dname) {
+            this.packet = null;
+            this.dname = dname;
+            this.connection = 0;
+            this.interactive = false;
+            this.usage = usage;
+        }
+    }
+
     public void insertLog(Packet packet, String dname, int connection, boolean interactive) {
         lock.writeLock().lock();
         try {
             SQLiteDatabase db = getWritableDatabase();
-
-            if (packet.protocol == 6 && "sni".equals(packet.data)) {
-                long from = packet.time - SYN_SNI_DELAY;
-                long to = packet.time + SYN_SNI_DELAY;
-                db.delete(
-                        "log",
-                        "protocol = 6 AND uid = ? AND version = ? AND saddr = ? AND daddr = ? AND dport = ? AND data = ? AND time BETWEEN ? AND ?",
-                        new String[]{
-                                String.valueOf(packet.uid),
-                                String.valueOf(packet.version),
-                                packet.saddr,
-                                packet.daddr,
-                                String.valueOf(packet.dport),
-                                "syn",
-                                String.valueOf(from),
-                                String.valueOf(to)
-                        }
-                );
-            }
-
-            ContentValues cv = new ContentValues();
-            cv.put("time", packet.time);
-            cv.put("version", packet.version >= 0 ? packet.version : null);
-            cv.put("protocol", packet.protocol >= 0 ? packet.protocol : null);
-            cv.put("flags", packet.flags);
-            cv.put("saddr", packet.saddr);
-            cv.put("sport", packet.sport >= 0 ? packet.sport : null);
-            cv.put("daddr", packet.daddr);
-            cv.put("dport", packet.dport >= 0 ? packet.dport : null);
-            cv.put("dname", dname);
-            cv.put("data", packet.data);
-            cv.put("uid", packet.uid >= 0 ? packet.uid : null);
-            cv.put("allowed", packet.allowed ? 1 : 0);
-            cv.put("connection", connection);
-            cv.put("interactive", interactive ? 1 : 0);
-
-            long id = db.insert("log", null, cv);
-            if (id < 0) {
-                Log.e(TAG, "insert log failed");
-            }
-
+            applyLogInternal(db, packet, dname, connection, interactive);
             notifyLogChanged();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private void applyLogInternal(SQLiteDatabase db, Packet packet, String dname, int connection, boolean interactive) {
+        if (packet.protocol == 6 && "sni".equals(packet.data)) {
+            long from = packet.time - SYN_SNI_DELAY;
+            long to = packet.time + SYN_SNI_DELAY;
+            db.delete(
+                    "log",
+                    "protocol = 6 AND uid = ? AND version = ? AND saddr = ? AND daddr = ? AND dport = ? AND data = ? AND time BETWEEN ? AND ?",
+                    new String[]{
+                            String.valueOf(packet.uid),
+                            String.valueOf(packet.version),
+                            packet.saddr,
+                            packet.daddr,
+                            String.valueOf(packet.dport),
+                            "syn",
+                            String.valueOf(from),
+                            String.valueOf(to)
+                    }
+            );
+        }
+
+        ContentValues cv = new ContentValues();
+        cv.put("time", packet.time);
+        cv.put("version", packet.version >= 0 ? packet.version : null);
+        cv.put("protocol", packet.protocol >= 0 ? packet.protocol : null);
+        cv.put("flags", packet.flags);
+        cv.put("saddr", packet.saddr);
+        cv.put("sport", packet.sport >= 0 ? packet.sport : null);
+        cv.put("daddr", packet.daddr);
+        cv.put("dport", packet.dport >= 0 ? packet.dport : null);
+        cv.put("dname", dname);
+        cv.put("data", packet.data);
+        cv.put("uid", packet.uid >= 0 ? packet.uid : null);
+        cv.put("allowed", packet.allowed ? 1 : 0);
+        cv.put("connection", connection);
+        cv.put("interactive", interactive ? 1 : 0);
+
+        long id = db.insert("log", null, cv);
+        if (id < 0) {
+            Log.e(TAG, "insert log failed");
+        }
+    }
+
+    public void insertBatch(List<LogBatchItem> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        lock.writeLock().lock();
+        boolean hasLogs = false;
+        boolean hasUsage = false;
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                for (LogBatchItem item : items) {
+                    if (item.usage != null) {
+                        applyUsageInternal(db, item.usage, item.dname);
+                        hasUsage = true;
+                    } else if (item.packet != null) {
+                        applyLogInternal(db, item.packet, item.dname, item.connection, item.interactive);
+                        hasLogs = true;
+                    }
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+            if (hasLogs) {
+                notifyLogChanged();
+            }
+            if (hasUsage) {
+                notifyAccessChanged();
+            }
         } finally {
             lock.writeLock().unlock();
         }
@@ -645,9 +706,18 @@ public class AegisDatabase extends SQLiteOpenHelper {
 
     public void updateUsage(Usage usage, String dname) {
         lock.writeLock().lock();
-        Cursor cursor = null;
         try {
             SQLiteDatabase db = getWritableDatabase();
+            applyUsageInternal(db, usage, dname);
+            notifyAccessChanged();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private void applyUsageInternal(SQLiteDatabase db, Usage usage, String dname) {
+        Cursor cursor = null;
+        try {
             String resolvedAddress = dname == null ? usage.DAddr : dname;
             String[] selectionArgs = new String[]{
                     String.valueOf(usage.Uid),
@@ -699,13 +769,10 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 cv.put("block", 0);
                 db.insert("access", null, cv);
             }
-
-            notifyAccessChanged();
         } finally {
             if (cursor != null) {
                 cursor.close();
             }
-            lock.writeLock().unlock();
         }
     }
 
@@ -1001,8 +1068,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
     }
 
     private void notifyLogChanged() {
-        if (handler != null) {
-            handler.sendEmptyMessage(MSG_LOG);
+        if (handler != null && !handler.hasMessages(MSG_LOG)) {
+            handler.sendEmptyMessageDelayed(MSG_LOG, 250);
         }
     }
 

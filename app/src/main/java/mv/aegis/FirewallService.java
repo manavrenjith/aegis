@@ -4,9 +4,11 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.ConnectivityManager;
@@ -21,8 +23,11 @@ import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -77,6 +82,12 @@ public class FirewallService extends VpnService {
     private Thread tunnelThread = null;
     private ThreatDetector threatDetector;
     private final ConcurrentHashMap<String, Integer> recentDomainUid = new ConcurrentHashMap<>();
+
+    private volatile boolean isInteractive = true;
+    private BroadcastReceiver screenReceiver = null;
+    private final LinkedBlockingQueue<AegisDatabase.LogBatchItem> logQueue = new LinkedBlockingQueue<>(2000);
+    private Thread logBatchThread = null;
+    private volatile boolean logBatchRunning = false;
 
     private native long jni_init(int sdk);
 
@@ -318,6 +329,29 @@ public class FirewallService extends VpnService {
                 Log.e(TAG, "ThreatDetector load failed", t);
             }
         }, "AegisThreatLoad").start();
+
+        isInteractive = AegisUtils.isInteractive(this);
+        screenReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null) {
+                    return;
+                }
+                if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                    isInteractive = true;
+                } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                    isInteractive = false;
+                }
+            }
+        };
+        IntentFilter screenFilter = new IntentFilter();
+        screenFilter.addAction(Intent.ACTION_SCREEN_ON);
+        screenFilter.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screenReceiver, screenFilter);
+
+        logBatchRunning = true;
+        logBatchThread = new Thread(this::runLogBatchWorker, "AegisLogBatch");
+        logBatchThread.start();
     }
 
     @Override
@@ -373,6 +407,24 @@ public class FirewallService extends VpnService {
                 jni_done(jni_context);
                 jni_context = 0;
             }
+        }
+
+        if (screenReceiver != null) {
+            try {
+                unregisterReceiver(screenReceiver);
+            } catch (Exception ignored) {
+            }
+            screenReceiver = null;
+        }
+
+        logBatchRunning = false;
+        if (logBatchThread != null) {
+            logBatchThread.interrupt();
+            try {
+                logBatchThread.join(3000);
+            } catch (InterruptedException ignored) {
+            }
+            logBatchThread = null;
         }
 
         super.onDestroy();
@@ -641,7 +693,7 @@ public class FirewallService extends VpnService {
             packet.allowed = !blocked;
 
             AegisDatabase.getInstance(this)
-                    .insertThreatLog(packet, domain, threatType, 0, AegisUtils.isInteractive(this));
+                    .insertThreatLog(packet, domain, threatType, 0, isInteractive);
 
             fireThreatNotification(domain, threatType, blocked, detail);
         } catch (Throwable t) {
@@ -678,10 +730,36 @@ public class FirewallService extends VpnService {
         }
     }
 
+    private void enqueueLogItem(AegisDatabase.LogBatchItem item) {
+        while (!logQueue.offer(item)) {
+            logQueue.poll();
+        }
+    }
+
+    private void runLogBatchWorker() {
+        List<AegisDatabase.LogBatchItem> batch = new ArrayList<>(100);
+        while (logBatchRunning || !logQueue.isEmpty()) {
+            try {
+                AegisDatabase.LogBatchItem first = logQueue.poll(250, TimeUnit.MILLISECONDS);
+                if (first != null) {
+                    batch.add(first);
+                    logQueue.drainTo(batch, 99);
+                }
+                if (!batch.isEmpty()) {
+                    AegisDatabase.getInstance(this).insertBatch(batch);
+                    batch.clear();
+                }
+            } catch (InterruptedException e) {
+                // Interrupted during shutdown, loop will drain remaining queue items
+            } catch (Throwable t) {
+                Log.e(TAG, "Failed to flush log batch", t);
+            }
+        }
+    }
+
     public void logPacket(Packet packet) {
         if (packet == null) return;
-        AegisDatabase.getInstance(this)
-                .insertLog(packet, null, 0, AegisUtils.isInteractive(this));
+        enqueueLogItem(new AegisDatabase.LogBatchItem(packet, null, 0, isInteractive));
     }
 
     public void dnsResolved(ResourceRecord rr) {
@@ -718,7 +796,7 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        AegisDatabase.getInstance(this).updateUsage(usage, null);
+        enqueueLogItem(new AegisDatabase.LogBatchItem(usage, null));
     }
 
     public void nativeExit(String reason) {
