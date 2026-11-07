@@ -336,7 +336,7 @@ public class FirewallRule {
 							baseLabel = "UID:" + appId;
 						}
 
-						String cloneLabel = baseLabel + " (clone, user " + userN + ")";
+						String cloneLabel = baseLabel + AegisUtils.cloneSuffix(cloneUid, appContext);
 						clonePi.applicationInfo.nonLocalizedLabel = cloneLabel;
 						listClones.add(clonePi);
 					} catch (Throwable ex) {

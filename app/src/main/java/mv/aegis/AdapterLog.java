@@ -71,7 +71,13 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             appName = "Unknown app";
         } else {
             List<String> names = AegisUtils.getApplicationNames(uid, context);
-            appName = names.isEmpty() ? ("UID:" + uid) : TextUtils.join(", ", names);
+            if (!names.isEmpty()) {
+                appName = TextUtils.join(", ", names);
+            } else if (AegisUtils.isCloneUid(uid)) {
+                appName = "UID:" + (uid % 100000) + AegisUtils.cloneSuffix(uid, context);
+            } else {
+                appName = "UID:" + uid;
+            }
         }
         holder.tvAppName.setText(appName);
 

@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.TreeSet;
 
 public final class AegisUtils {
 
@@ -73,6 +74,43 @@ public final class AegisUtils {
         }
         int appId = uid % 100000;
         return appId >= 10000 && appId <= 19999;
+    }
+
+    public static String cloneSuffix(int uid, Context context) {
+        if (!isCloneUid(uid) || context == null) {
+            return "";
+        }
+        int targetUser = uid / 100000;
+        TreeSet<Integer> userIds = new TreeSet<>();
+        SharedPreferences clonePrefs = context.getApplicationContext()
+                .getSharedPreferences("clones", Context.MODE_PRIVATE);
+        Set<String> uids = clonePrefs.getStringSet("uids", Collections.emptySet());
+        if (uids != null) {
+            for (String s : uids) {
+                try {
+                    int u = Integer.parseInt(s);
+                    if (isCloneUid(u)) {
+                        userIds.add(u / 100000);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        userIds.add(targetUser);
+
+        int rank = 0;
+        for (Integer userId : userIds) {
+            if (userId == targetUser) {
+                break;
+            }
+            rank++;
+        }
+
+        if (rank == 0) {
+            return " (clone)";
+        } else {
+            return " (clone " + (rank + 1) + ")";
+        }
     }
 
     public static boolean hasInternet(String packageName, Context context) {
@@ -192,10 +230,10 @@ public final class AegisUtils {
 
         if (isCloneUid(uid)) {
             int appId = uid % 100000;
-            int n = uid / 100000;
+            String suffix = cloneSuffix(uid, context);
             List<String> baseNames = getApplicationNames(appId, context);
             for (String baseName : baseNames) {
-                names.add(baseName + " (user " + n + ")");
+                names.add(baseName + suffix);
             }
             if (!names.isEmpty()) {
                 Collections.sort(names);

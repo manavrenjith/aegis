@@ -53,8 +53,7 @@ public class AdapterActivity extends CursorAdapter {
         } else if (names.isEmpty()) {
             if (AegisUtils.isCloneUid(uid)) {
                 int appId = uid % 100000;
-                int n = uid / 100000;
-                tvName.setText("UID:" + appId + " (user " + n + ")");
+                tvName.setText("UID:" + appId + AegisUtils.cloneSuffix(uid, context));
             } else {
                 tvName.setText(Integer.toString(uid));
             }
