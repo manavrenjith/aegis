@@ -372,6 +372,10 @@ void handle_ip(const struct arguments *args,
         log_uid = (udp_session != NULL ? udp_session->udp.uid : -1);
     }
 
+    int log_allowed = allowed;
+    if (protocol == IPPROTO_UDP && udp_session != NULL && udp_session->udp.state == UDP_BLOCKED)
+        log_allowed = 0;
+
     // Handle allowed traffic
     if (allowed) {
         if (protocol == IPPROTO_ICMP || protocol == IPPROTO_ICMPV6)
@@ -382,7 +386,7 @@ void handle_ip(const struct arguments *args,
             handle_tcp(args, pkt, length, payload, uid, allowed, redirect, epoll_fd);
 
         jobject logPacket = create_packet(
-                args, version, protocol, flags, source, sport, dest, dport, data, log_uid, 1);
+                args, version, protocol, flags, source, sport, dest, dport, data, log_uid, log_allowed);
         log_packet(args, logPacket);
     } else {
         if (protocol == IPPROTO_UDP)
