@@ -19,13 +19,18 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.util.Log;
 import java.net.InetSocketAddress;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -83,7 +88,45 @@ public class FirewallService extends VpnService {
 
     private volatile boolean isInteractive = true;
     private BroadcastReceiver screenReceiver = null;
-    private final LinkedBlockingQueue<AegisDatabase.LogBatchItem> logQueue = new LinkedBlockingQueue<>(2000);
+
+    private static final class UidDestKey {
+        final int uid;
+        final String dest;
+
+        UidDestKey(int uid, String dest) {
+            this.uid = uid;
+            this.dest = dest != null ? dest : "";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            UidDestKey that = (UidDestKey) o;
+            return uid == that.uid && dest.equals(that.dest);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * uid + dest.hashCode();
+        }
+    }
+
+    private static final int QUEUE_SOFT_CAPACITY = 2000;
+    private final Object logQueueLock = new Object();
+    private final ArrayDeque<AegisDatabase.LogBatchItem> logQueue = new ArrayDeque<>();
+    private final Map<UidDestKey, AegisDatabase.LogBatchItem> pendingEntries = new HashMap<>();
+    private final LinkedHashMap<UidDestKey, Boolean> seenPairs = new LinkedHashMap<UidDestKey, Boolean>(5000, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<UidDestKey, Boolean> eldest) {
+            return size() > 5000;
+        }
+    };
+    private final AtomicLong mergedCount = new AtomicLong(0);
+    private final AtomicLong droppedCount = new AtomicLong(0);
+    private final AtomicLong unresolvedUidCount = new AtomicLong(0);
+    private volatile long lastStatsWarnTime = 0;
+
     private Thread logBatchThread = null;
     private volatile boolean logBatchRunning = false;
 
@@ -328,7 +371,8 @@ public class FirewallService extends VpnService {
             }
         }, "AegisThreatLoad").start();
 
-        isInteractive = AegisUtils.isInteractive(this);
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        isInteractive = (pm != null && pm.isInteractive());
         screenReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -417,6 +461,9 @@ public class FirewallService extends VpnService {
 
         logBatchRunning = false;
         if (logBatchThread != null) {
+            synchronized (logQueueLock) {
+                logQueueLock.notifyAll();
+            }
             logBatchThread.interrupt();
             try {
                 logBatchThread.join(3000);
@@ -728,30 +775,131 @@ public class FirewallService extends VpnService {
         }
     }
 
+    private static UidDestKey getBatchItemKey(AegisDatabase.LogBatchItem item) {
+        if (item.packet != null) {
+            return new UidDestKey(item.packet.uid, item.packet.daddr != null ? item.packet.daddr : "");
+        }
+        if (item.usage != null) {
+            return new UidDestKey(item.usage.Uid, item.usage.DAddr != null ? item.usage.DAddr : "");
+        }
+        if (item.rr != null) {
+            String d = item.rr.QName != null ? item.rr.QName : (item.rr.Resource != null ? item.rr.Resource : "");
+            return new UidDestKey(item.rr.uid, d);
+        }
+        return new UidDestKey(-1, "");
+    }
+
+    private static int getBatchItemUid(AegisDatabase.LogBatchItem item) {
+        if (item.packet != null) return item.packet.uid;
+        if (item.usage != null) return item.usage.Uid;
+        if (item.rr != null) return item.rr.uid;
+        return -1;
+    }
+
+    private void checkLogStatsWarning() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastStatsWarnTime >= 60000L) {
+            long merged = mergedCount.get();
+            long dropped = droppedCount.get();
+            long unresolved = unresolvedUidCount.get();
+            if (merged > 0 || dropped > 0 || unresolved > 0) {
+                Log.w(TAG, "Log queue stats: merged=" + merged + ", dropped=" + dropped + ", unresolved_uid=" + unresolved);
+                lastStatsWarnTime = now;
+            }
+        }
+    }
+
+    private boolean isLogQueueEmpty() {
+        synchronized (logQueueLock) {
+            return logQueue.isEmpty();
+        }
+    }
+
     private void enqueueLogItem(AegisDatabase.LogBatchItem item) {
-        while (!logQueue.offer(item)) {
-            logQueue.poll();
+        if (item == null) {
+            return;
+        }
+
+        // Capture timestamp and screen state at enqueue time
+        long now = System.currentTimeMillis();
+        boolean interactive = isInteractive;
+        item.timestamp = now;
+        item.interactive = interactive;
+        if (item.packet != null) {
+            item.packet.time = now;
+        }
+        if (item.usage != null) {
+            item.usage.Time = now;
+        }
+
+        int uid = getBatchItemUid(item);
+        if (uid < 0) {
+            unresolvedUidCount.incrementAndGet();
+        }
+
+        UidDestKey key = getBatchItemKey(item);
+
+        synchronized (logQueueLock) {
+            boolean isFull = logQueue.size() >= QUEUE_SOFT_CAPACITY;
+            if (!isFull) {
+                seenPairs.put(key, Boolean.TRUE);
+                logQueue.add(item);
+                pendingEntries.put(key, item);
+                logQueueLock.notify();
+            } else {
+                if (!seenPairs.containsKey(key)) {
+                    // Queue full, but pair not seen: must still be enqueued (exceeds soft limit)
+                    seenPairs.put(key, Boolean.TRUE);
+                    logQueue.add(item);
+                    pendingEntries.put(key, item);
+                    logQueueLock.notify();
+                } else {
+                    // Already-seen pair: merge into pending entry if one exists, else drop
+                    AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
+                    if (pending != null) {
+                        pending.merge(item);
+                        mergedCount.incrementAndGet();
+                    } else {
+                        droppedCount.incrementAndGet();
+                    }
+                }
+            }
         }
     }
 
     private void runLogBatchWorker() {
         List<AegisDatabase.LogBatchItem> batch = new ArrayList<>(100);
-        while (logBatchRunning || !logQueue.isEmpty()) {
-            try {
-                AegisDatabase.LogBatchItem first = logQueue.poll(250, TimeUnit.MILLISECONDS);
-                if (first != null) {
-                    batch.add(first);
-                    logQueue.drainTo(batch, 99);
+        while (logBatchRunning || !isLogQueueEmpty()) {
+            synchronized (logQueueLock) {
+                while (logQueue.isEmpty() && logBatchRunning) {
+                    try {
+                        logQueueLock.wait(250);
+                    } catch (InterruptedException e) {
+                        // Interrupted on shutdown
+                    }
                 }
-                if (!batch.isEmpty()) {
-                    AegisDatabase.getInstance(this).insertBatch(batch);
-                    batch.clear();
+                for (int i = 0; i < 100 && !logQueue.isEmpty(); i++) {
+                    AegisDatabase.LogBatchItem item = logQueue.poll();
+                    if (item != null) {
+                        batch.add(item);
+                        UidDestKey key = getBatchItemKey(item);
+                        if (pendingEntries.get(key) == item) {
+                            pendingEntries.remove(key);
+                        }
+                    }
                 }
-            } catch (InterruptedException e) {
-                // Interrupted during shutdown, loop will drain remaining queue items
-            } catch (Throwable t) {
-                Log.e(TAG, "Failed to flush log batch", t);
             }
+
+            if (!batch.isEmpty()) {
+                try {
+                    AegisDatabase.getInstance(this).insertBatch(batch);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Failed to flush log batch", t);
+                }
+                batch.clear();
+            }
+
+            checkLogStatsWarning();
         }
     }
 

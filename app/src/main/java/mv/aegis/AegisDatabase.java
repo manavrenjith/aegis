@@ -329,9 +329,11 @@ public class AegisDatabase extends SQLiteOpenHelper {
     public static class LogBatchItem {
         public final Packet packet;
         public final String dname;
-        public final int connection;
-        public final boolean interactive;
+        public int connection;
+        public boolean interactive;
         public final Usage usage;
+        public final ResourceRecord rr;
+        public long timestamp;
 
         public LogBatchItem(Packet packet, String dname, int connection, boolean interactive) {
             this.packet = packet;
@@ -339,6 +341,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.connection = connection;
             this.interactive = interactive;
             this.usage = null;
+            this.rr = null;
+            this.timestamp = packet != null ? packet.time : System.currentTimeMillis();
         }
 
         public LogBatchItem(Usage usage, String dname) {
@@ -347,6 +351,35 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.connection = 0;
             this.interactive = false;
             this.usage = usage;
+            this.rr = null;
+            this.timestamp = usage != null ? usage.Time : System.currentTimeMillis();
+        }
+
+        public LogBatchItem(ResourceRecord rr) {
+            this.packet = null;
+            this.dname = null;
+            this.connection = 0;
+            this.interactive = false;
+            this.usage = null;
+            this.rr = rr;
+            this.timestamp = rr != null ? rr.Time : System.currentTimeMillis();
+        }
+
+        public void merge(LogBatchItem other) {
+            if (other == null) {
+                return;
+            }
+            this.timestamp = other.timestamp;
+            this.interactive = other.interactive;
+            if (this.packet != null && other.packet != null) {
+                this.packet.time = other.timestamp;
+                this.connection += (other.connection > 0 ? other.connection : 1);
+            }
+            if (this.usage != null && other.usage != null) {
+                this.usage.Sent += other.usage.Sent;
+                this.usage.Received += other.usage.Received;
+                this.usage.Time = other.timestamp;
+            }
         }
     }
 
