@@ -61,15 +61,7 @@ public class AdapterActivity extends CursorAdapter {
             tvName.setText(names.get(0));
         }
 
-        String[] pkgs = null;
-        try {
-            pkgs = pm.getPackagesForUid(uid);
-            if ((pkgs == null || pkgs.length == 0) && AegisUtils.isCloneUid(uid)) {
-                pkgs = pm.getPackagesForUid(uid % 100000);
-            }
-        } catch (SecurityException e) {
-            Log.w("AdapterActivity", "Cannot get packages for uid=" + uid);
-        }
+        String[] pkgs = AegisUtils.packagesForUid(pm, uid);
         String pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
         tvPackage.setText(pkg != null ? pkg : (uid < 0 ? "Unknown" : "uid:" + uid));
 

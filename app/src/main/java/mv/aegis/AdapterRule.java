@@ -100,7 +100,7 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
                 try {
                     String pkg = rule.packageName;
                     if (pkg != null && pkg.startsWith("clone:") && AegisUtils.isCloneUid(rule.uid)) {
-                        String[] pkgs = context.getPackageManager().getPackagesForUid(rule.uid % 100000);
+                        String[] pkgs = AegisUtils.packagesForUid(context.getPackageManager(), rule.uid);
                         pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
                     }
                     if (pkg != null) {
@@ -249,7 +249,7 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
                 try {
                     String pkg = rule.packageName;
                     if (pkg != null && pkg.startsWith("clone:") && AegisUtils.isCloneUid(rule.uid)) {
-                        String[] pkgs = context.getPackageManager().getPackagesForUid(rule.uid % 100000);
+                        String[] pkgs = AegisUtils.packagesForUid(context.getPackageManager(), rule.uid);
                         pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
                     }
                     if (pkg != null) {
@@ -267,7 +267,7 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
             Intent launchIntent = null;
             String pkg = rule.packageName;
             if (pkg != null && pkg.startsWith("clone:") && AegisUtils.isCloneUid(rule.uid)) {
-                String[] pkgs = context.getPackageManager().getPackagesForUid(rule.uid % 100000);
+                String[] pkgs = AegisUtils.packagesForUid(context.getPackageManager(), rule.uid);
                 pkg = (pkgs != null && pkgs.length > 0) ? pkgs[0] : null;
             }
             if (!TextUtils.isEmpty(pkg)) {

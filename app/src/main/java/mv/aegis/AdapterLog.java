@@ -118,7 +118,7 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
     }
 
     private Drawable resolveIcon(int uid) {
-        String[] packages = packageManager.getPackagesForUid(uid);
+        String[] packages = AegisUtils.packagesForUid(packageManager, uid);
         if (packages != null && packages.length > 0) {
             try {
                 return packageManager.getApplicationIcon(packages[0]);

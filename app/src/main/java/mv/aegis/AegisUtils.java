@@ -57,7 +57,7 @@ public final class AegisUtils {
 
     public static boolean isSystem(int uid, Context context) {
         PackageManager pm = context.getPackageManager();
-        String[] packages = pm.getPackagesForUid(uid);
+        String[] packages = packagesForUid(pm, uid);
         if (packages != null) {
             for (String pkg : packages) {
                 if (isSystem(pkg, context)) {
@@ -142,7 +142,7 @@ public final class AegisUtils {
 
     public static boolean hasInternet(int uid, Context context) {
         PackageManager pm = context.getPackageManager();
-        String[] packages = pm.getPackagesForUid(uid);
+        String[] packages = packagesForUid(pm, uid);
         if (packages != null) {
             for (String pkg : packages) {
                 if (hasInternet(pkg, context)) {
@@ -255,7 +255,7 @@ public final class AegisUtils {
 
         PackageManager pm = context.getPackageManager();
         try {
-            String[] packages = pm.getPackagesForUid(uid);
+            String[] packages = packagesForUid(pm, uid);
             if (packages != null) {
                 for (String pkg : packages) {
                     ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
