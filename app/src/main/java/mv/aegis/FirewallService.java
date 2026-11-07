@@ -394,8 +394,12 @@ public class FirewallService extends VpnService {
         startForeground(NOTIFY_WAITING, getWaitingNotification());
 
         synchronized (jni_lock) {
-            Log.d(TAG, "jni_init called");
-            jni_context = jni_init(Build.VERSION.SDK_INT);
+            if (jni_context != 0) {
+                Log.w(TAG, "jni_init in onCreate: existing jni_context is non-zero (" + jni_context + "), not overwriting or freeing");
+            } else {
+                Log.d(TAG, "jni_init called");
+                jni_context = jni_init(Build.VERSION.SDK_INT);
+            }
         }
 
         HandlerThread handlerThread = new HandlerThread("AegisCommand", android.os.Process.THREAD_PRIORITY_FOREGROUND);
@@ -469,50 +473,58 @@ public class FirewallService extends VpnService {
         super.onRevoke();
     }
 
-    private void teardown() {
-        stop(false);
-
-        if (tunnelThread != null && tunnelThread.isAlive()) {
+    private void teardown(
+            long context,
+            Thread tThread,
+            Thread lThread,
+            ParcelFileDescriptor vpnFd,
+            Looper cmdLooper
+    ) {
+        if (vpnFd != null) {
+            if (context != 0) {
+                jni_stop(context);
+            }
             try {
-                tunnelThread.join(2000);
+                vpnFd.close();
+            } catch (Exception exception) {
+                Log.w(TAG, "Failed to close VPN in teardown", exception);
+            }
+        }
+
+        boolean tunnelStillAlive = false;
+        if (tThread != null && tThread.isAlive()) {
+            try {
+                tThread.join(2000);
             } catch (InterruptedException ignored) {
             }
-            if (tunnelThread.isAlive()) {
+            if (tThread.isAlive()) {
                 Log.e(TAG, "tunnelThread still alive after join timeout in teardown");
-                tunnelStillRunning = true;
-            } else {
-                tunnelThread = null;
-                tunnelStillRunning = false;
+                tunnelStillAlive = true;
             }
         }
 
         logBatchRunning = false;
-        if (logBatchThread != null) {
+        if (lThread != null) {
             synchronized (logQueueLock) {
                 logQueueLock.notifyAll();
             }
-            logBatchThread.interrupt();
+            lThread.interrupt();
             try {
-                logBatchThread.join(3000);
+                lThread.join(3000);
             } catch (InterruptedException ignored) {
             }
-            logBatchThread = null;
         }
 
-        synchronized (jni_lock) {
-            if (jni_context != 0) {
-                if (tunnelStillRunning || (tunnelThread != null && tunnelThread.isAlive())) {
-                    Log.w(TAG, "tunnel thread is still alive; leaking native context to prevent crash");
-                } else {
-                    jni_done(jni_context);
-                    jni_context = 0;
-                }
+        if (context != 0) {
+            if (tunnelStillAlive || (tThread != null && tThread.isAlive())) {
+                Log.w(TAG, "tunnel thread is still alive; leaking native context " + context + " to prevent crash");
+            } else {
+                jni_done(context);
             }
         }
 
-        if (commandLooper != null) {
-            commandLooper.quitSafely();
-            commandLooper = null;
+        if (cmdLooper != null) {
+            cmdLooper.quitSafely();
         }
     }
 
@@ -526,7 +538,35 @@ public class FirewallService extends VpnService {
             screenReceiver = null;
         }
 
-        new Thread(this::teardown, "FirewallTeardown").start();
+        long snapshotContext;
+        synchronized (jni_lock) {
+            snapshotContext = jni_context;
+            jni_context = 0;
+        }
+
+        Thread snapshotTunnelThread = tunnelThread;
+        tunnelThread = null;
+        Thread snapshotLogBatchThread = logBatchThread;
+        logBatchThread = null;
+        ParcelFileDescriptor snapshotVpn = vpn;
+        vpn = null;
+        if (tunFd != null) {
+            try {
+                tunFd.close();
+            } catch (Exception ignored) {
+            }
+            tunFd = null;
+        }
+        Looper snapshotCommandLooper = commandLooper;
+        commandLooper = null;
+
+        new Thread(() -> teardown(
+                snapshotContext,
+                snapshotTunnelThread,
+                snapshotLogBatchThread,
+                snapshotVpn,
+                snapshotCommandLooper
+        ), "FirewallTeardown").start();
 
         super.onDestroy();
     }
