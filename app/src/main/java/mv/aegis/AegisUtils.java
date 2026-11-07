@@ -31,6 +31,12 @@ public final class AegisUtils {
 
     private static final String TAG = "Aegis.Utils";
 
+    public static final boolean WHITELIST_DEFAULT = false;
+
+    public static boolean isWhitelist(SharedPreferences sp, String key) {
+        return sp.getBoolean(key, WHITELIST_DEFAULT);
+    }
+
     private AegisUtils() {
     }
 

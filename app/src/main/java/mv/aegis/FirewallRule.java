@@ -222,11 +222,11 @@ public class FirewallRule {
 			SharedPreferences apply = appContext.getSharedPreferences("apply", Context.MODE_PRIVATE);
 			SharedPreferences notify = appContext.getSharedPreferences("notify", Context.MODE_PRIVATE);
 
-			boolean defaultWifi = prefs.getBoolean("whitelist_wifi", true);
-			boolean defaultOther = prefs.getBoolean("whitelist_other", true);
+			boolean defaultWifi = AegisUtils.isWhitelist(prefs, "whitelist_wifi");
+			boolean defaultOther = AegisUtils.isWhitelist(prefs, "whitelist_other");
 			boolean defaultScreenWifi = prefs.getBoolean("screen_wifi", false);
 			boolean defaultScreenOther = prefs.getBoolean("screen_other", false);
-			boolean defaultRoaming = prefs.getBoolean("whitelist_roaming", true);
+			boolean defaultRoaming = AegisUtils.isWhitelist(prefs, "whitelist_roaming");
 			boolean manageSystem = prefs.getBoolean("manage_system", false);
 			boolean screenOn = prefs.getBoolean("screen_on", true);
 			boolean showUser = prefs.getBoolean("show_user", true);
@@ -484,9 +484,9 @@ public class FirewallRule {
 	public void updateChanged(Context context) {
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
 		boolean screenOn = prefs.getBoolean("screen_on", true);
-		boolean defaultWifi = prefs.getBoolean("whitelist_wifi", true);
-		boolean defaultOther = prefs.getBoolean("whitelist_other", true);
-		boolean defaultRoaming = prefs.getBoolean("whitelist_roaming", true);
+		boolean defaultWifi = AegisUtils.isWhitelist(prefs, "whitelist_wifi");
+		boolean defaultOther = AegisUtils.isWhitelist(prefs, "whitelist_other");
+		boolean defaultRoaming = AegisUtils.isWhitelist(prefs, "whitelist_roaming");
 
 		screen_wifi_default = prefs.getBoolean("screen_wifi", false) && screenOn;
 		screen_other_default = prefs.getBoolean("screen_other", false) && screenOn;

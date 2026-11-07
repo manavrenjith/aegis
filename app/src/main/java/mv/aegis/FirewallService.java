@@ -342,9 +342,9 @@ public class FirewallService extends VpnService {
         // Read default policy from SharedPreferences
         // Default allow is the inverse of whitelist mode preference
         SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
-        boolean whitelist_wifi = sp.getBoolean("whitelist_wifi", false);
-        boolean whitelist_other = sp.getBoolean("whitelist_other", false);
-        boolean whitelist_roaming = sp.getBoolean("whitelist_roaming", false);
+        boolean whitelist_wifi = AegisUtils.isWhitelist(sp, "whitelist_wifi");
+        boolean whitelist_other = AegisUtils.isWhitelist(sp, "whitelist_other");
+        boolean whitelist_roaming = AegisUtils.isWhitelist(sp, "whitelist_roaming");
         boolean default_allow_wifi = !whitelist_wifi;
         boolean default_allow_other = !whitelist_other;
         boolean default_allow_roaming = !whitelist_roaming;
@@ -903,8 +903,8 @@ public class FirewallService extends VpnService {
             blocked = isWifi ? matchedRule.wifi_blocked : matchedRule.other_blocked;
         } else {
             SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
-            boolean whitelist_wifi = sp.getBoolean("whitelist_wifi", false);
-            boolean whitelist_other = sp.getBoolean("whitelist_other", false);
+            boolean whitelist_wifi = AegisUtils.isWhitelist(sp, "whitelist_wifi");
+            boolean whitelist_other = AegisUtils.isWhitelist(sp, "whitelist_other");
             boolean whitelist = isWifi ? whitelist_wifi : whitelist_other;
             blocked = whitelist;
         }
