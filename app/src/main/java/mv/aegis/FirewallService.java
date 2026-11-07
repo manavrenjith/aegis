@@ -326,6 +326,14 @@ public class FirewallService extends VpnService {
             vpn = null;
         }
 
+        if (tunnelThread != null) {
+            try {
+                tunnelThread.join(2000);
+            } catch (InterruptedException ignored) {
+            }
+            tunnelThread = null;
+        }
+
         if (state == State.enforcing && !temporary) {
             stopForeground(true);
             state = State.none;
@@ -456,25 +464,19 @@ public class FirewallService extends VpnService {
 
     @Override
     public void onDestroy() {
+        stop(false);
+
+        if (tunnelThread != null) {
+            try {
+                tunnelThread.join(2000);
+            } catch (InterruptedException ignored) {
+            }
+            tunnelThread = null;
+        }
+
         if (commandLooper != null) {
             commandLooper.quitSafely();
             commandLooper = null;
-        }
-
-        if (vpn != null) {
-            try {
-                vpn.close();
-            } catch (Exception exception) {
-                Log.w(TAG, "Failed to close VPN on destroy", exception);
-            }
-            vpn = null;
-        }
-
-        synchronized (jni_lock) {
-            if (jni_context != 0) {
-                jni_done(jni_context);
-                jni_context = 0;
-            }
         }
 
         if (screenReceiver != null) {
@@ -496,6 +498,13 @@ public class FirewallService extends VpnService {
             } catch (InterruptedException ignored) {
             }
             logBatchThread = null;
+        }
+
+        synchronized (jni_lock) {
+            if (jni_context != 0) {
+                jni_done(jni_context);
+                jni_context = 0;
+            }
         }
 
         super.onDestroy();
