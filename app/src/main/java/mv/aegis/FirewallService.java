@@ -1012,8 +1012,7 @@ public class FirewallService extends VpnService {
             packet.uid = recentUidForDomain(domain);
             packet.allowed = !blocked;
 
-            AegisDatabase.getInstance(this)
-                    .insertThreatLog(packet, domain, threatType, 0, isInteractive);
+            enqueueLogItem(new AegisDatabase.LogBatchItem(packet, domain, threatType, 0, isInteractive));
 
             fireThreatNotification(domain, threatType, blocked, detail);
         } catch (Throwable t) {
@@ -1140,7 +1139,7 @@ public class FirewallService extends VpnService {
 
         synchronized (logQueueLock) {
             boolean wasEmpty = logQueue.isEmpty();
-            boolean isUsageOrDns = (item.usage != null || item.rr != null);
+            boolean isUsageOrDns = (item.usage != null || item.rr != null || item.threatType != null);
 
             if (isUsageOrDns) {
                 // Usage and DNS items are never dropped or overflowed: only added to the queue

@@ -634,6 +634,34 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
+    private void applyThreatInternal(SQLiteDatabase db, LogBatchItem item) {
+        Packet packet = item.packet;
+        ContentValues cv = new ContentValues();
+        cv.put("time", packet != null ? packet.time : item.timestamp);
+        cv.put("version", (packet != null && packet.version >= 0) ? packet.version : null);
+        cv.put("protocol", (packet != null && packet.protocol >= 0) ? packet.protocol : null);
+        cv.put("flags", packet != null ? packet.flags : null);
+        cv.put("saddr", packet != null ? packet.saddr : null);
+        cv.put("sport", (packet != null && packet.sport >= 0) ? packet.sport : null);
+        cv.put("daddr", packet != null ? packet.daddr : null);
+        cv.put("dport", (packet != null && packet.dport >= 0) ? packet.dport : null);
+        cv.put("dname", item.dname);
+        cv.put("data", packet != null ? packet.data : null);
+        cv.put("uid", (packet != null && packet.uid >= 0) ? packet.uid : null);
+        int allowedVal = (packet != null && packet.hasCustomStatus && packet.status >= 0)
+                ? packet.status
+                : ((packet != null && packet.allowed) ? 1 : 0);
+        cv.put("allowed", allowedVal);
+        cv.put("connection", item.connection);
+        cv.put("interactive", item.interactive ? 1 : 0);
+        cv.put("threat_type", item.threatType);
+
+        long id = db.insert("log", null, cv);
+        if (id < 0) {
+            Log.e(TAG, "insert threat log failed");
+        }
+    }
+
     public void insertBatch(List<LogBatchItem> items) {
         if (items == null || items.isEmpty()) {
             return;
@@ -662,6 +690,9 @@ public class AegisDatabase extends SQLiteOpenHelper {
                     if (item.usage != null) {
                         applyUsageInternal(db, item.usage, item.dname);
                         hasUsage = true;
+                    } else if (item.threatType != null) {
+                        applyThreatInternal(db, item);
+                        hasLogs = true;
                     } else if (item.packet != null) {
                         int allowedVal = (item.packet.hasCustomStatus && item.packet.status >= 0)
                                 ? item.packet.status
@@ -705,40 +736,6 @@ public class AegisDatabase extends SQLiteOpenHelper {
             if (updateStmt != null) {
                 updateStmt.close();
             }
-            lock.writeLock().unlock();
-        }
-    }
-
-    public void insertThreatLog(Packet packet, String dname, String threatType, int connection, boolean interactive) {
-        lock.writeLock().lock();
-        try {
-            SQLiteDatabase db = getWritableDatabase();
-
-            ContentValues cv = new ContentValues();
-            cv.put("time", packet.time);
-            cv.put("version", packet.version >= 0 ? packet.version : null);
-            cv.put("protocol", packet.protocol >= 0 ? packet.protocol : null);
-            cv.put("flags", packet.flags);
-            cv.put("saddr", packet.saddr);
-            cv.put("sport", packet.sport >= 0 ? packet.sport : null);
-            cv.put("daddr", packet.daddr);
-            cv.put("dport", packet.dport >= 0 ? packet.dport : null);
-            cv.put("dname", dname);
-            cv.put("data", packet.data);
-            cv.put("uid", packet.uid >= 0 ? packet.uid : null);
-            int allowedVal = (packet.hasCustomStatus && packet.status >= 0) ? packet.status : (packet.allowed ? 1 : 0);
-            cv.put("allowed", allowedVal);
-            cv.put("connection", connection);
-            cv.put("interactive", interactive ? 1 : 0);
-            cv.put("threat_type", threatType);
-
-            long id = db.insert("log", null, cv);
-            if (id < 0) {
-                Log.e(TAG, "insert threat log failed");
-            }
-
-            notifyLogChanged();
-        } finally {
             lock.writeLock().unlock();
         }
     }
