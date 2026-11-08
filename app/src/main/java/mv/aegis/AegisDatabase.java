@@ -368,6 +368,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
     public static class LogBatchItem {
         public final Packet packet;
         public String dname;
+        public final String threatType;
         public int connection;
         public boolean interactive;
         public final Usage usage;
@@ -380,6 +381,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         public LogBatchItem(Packet packet, String dname, int connection, boolean interactive) {
             this.packet = packet;
             this.dname = dname;
+            this.threatType = null;
             this.connection = connection;
             this.interactive = interactive;
             this.usage = null;
@@ -393,6 +395,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         public LogBatchItem(Usage usage, String dname) {
             this.packet = null;
             this.dname = dname;
+            this.threatType = null;
             this.connection = 0;
             this.interactive = false;
             this.usage = usage;
@@ -406,6 +409,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         public LogBatchItem(ResourceRecord rr) {
             this.packet = null;
             this.dname = null;
+            this.threatType = null;
             this.connection = 0;
             this.interactive = false;
             this.usage = null;
@@ -416,8 +420,25 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.time_end = this.timestamp;
         }
 
+        public LogBatchItem(Packet packet, String dname, String threatType, int connection, boolean interactive) {
+            this.packet = packet;
+            this.dname = dname;
+            this.threatType = threatType;
+            this.connection = connection;
+            this.interactive = interactive;
+            this.usage = null;
+            this.rr = null;
+            this.timestamp = packet != null ? packet.time : System.currentTimeMillis();
+            this.packets = 1;
+            this.screenOff = interactive ? 0 : 1;
+            this.time_end = this.timestamp;
+        }
+
         public void merge(LogBatchItem other) {
             if (other == null) {
+                return;
+            }
+            if (this.threatType != null || other.threatType != null) {
                 return;
             }
             if (this.packet == null || other.packet == null) {
