@@ -470,7 +470,7 @@ public class FirewallRule {
 			}
 
 			Log.d("Aegis.Rule", "getRules returning " + listRules.size() + " rules, all=" + all);
-			Log.d("Aegis.Rule", "Default policy - WiFi: allow=" + defaultWifi + ", Other: allow=" + defaultOther + ", Roaming: allow=" + defaultRoaming);
+			Log.d("Aegis.Rule", "Default policy - WiFi: allow=" + !defaultWifi + ", Other: allow=" + !defaultOther + ", Roaming: allow=" + !defaultRoaming);
 			for (FirewallRule rule : listRules) {
 				Log.d("Aegis.Rule", "Rule: " + rule.packageName + " uid=" + rule.uid + " wifi_blocked=" + rule.wifi_blocked + " other_blocked=" + rule.other_blocked);
 			}
