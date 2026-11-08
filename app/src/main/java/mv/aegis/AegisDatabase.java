@@ -378,17 +378,6 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
-    public void insertLog(Packet packet, String dname, int connection, boolean interactive) {
-        lock.writeLock().lock();
-        try {
-            SQLiteDatabase db = getWritableDatabase();
-            applyLogInternal(db, packet, dname, connection, interactive);
-            notifyLogChanged();
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
     private void applyLogInternal(SQLiteDatabase db, Packet packet, String dname, int connection, boolean interactive) {
         if (packet.protocol == 6 && "sni".equals(packet.data)) {
             long from = packet.time - SYN_SNI_DELAY;
