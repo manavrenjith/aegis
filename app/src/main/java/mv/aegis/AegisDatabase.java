@@ -536,28 +536,47 @@ public class AegisDatabase extends SQLiteOpenHelper {
             long foundId = -1;
             Cursor cursor = null;
             try {
-                String sql;
-                String[] args;
+                StringBuilder where = new StringBuilder();
+                List<String> argsList = new ArrayList<>();
+
                 if (item.packet.uid >= 0) {
-                    sql = "SELECT ID FROM log WHERE uid IS ? AND daddr = ? AND dport = ? AND protocol = ? AND allowed = ? AND threat_type IS NULL AND time >= ? ORDER BY time DESC LIMIT 1";
-                    args = new String[]{
-                            String.valueOf(item.packet.uid),
-                            item.packet.daddr != null ? item.packet.daddr : "",
-                            String.valueOf(item.packet.dport),
-                            String.valueOf(item.packet.protocol),
-                            String.valueOf(allowedVal),
-                            String.valueOf(windowStart)
-                    };
+                    where.append("uid IS ?");
+                    argsList.add(String.valueOf(item.packet.uid));
                 } else {
-                    sql = "SELECT ID FROM log WHERE uid IS NULL AND daddr = ? AND dport = ? AND protocol = ? AND allowed = ? AND threat_type IS NULL AND time >= ? ORDER BY time DESC LIMIT 1";
-                    args = new String[]{
-                            item.packet.daddr != null ? item.packet.daddr : "",
-                            String.valueOf(item.packet.dport),
-                            String.valueOf(item.packet.protocol),
-                            String.valueOf(allowedVal),
-                            String.valueOf(windowStart)
-                    };
+                    where.append("uid IS NULL");
                 }
+
+                if (item.packet.daddr != null) {
+                    where.append(" AND daddr = ?");
+                    argsList.add(item.packet.daddr);
+                } else {
+                    where.append(" AND daddr IS NULL");
+                }
+
+                if (item.packet.dport >= 0) {
+                    where.append(" AND dport = ?");
+                    argsList.add(String.valueOf(item.packet.dport));
+                } else {
+                    where.append(" AND dport IS NULL");
+                }
+
+                if (item.packet.protocol >= 0) {
+                    where.append(" AND protocol = ?");
+                    argsList.add(String.valueOf(item.packet.protocol));
+                } else {
+                    where.append(" AND protocol IS NULL");
+                }
+
+                where.append(" AND allowed = ?");
+                argsList.add(String.valueOf(allowedVal));
+
+                where.append(" AND threat_type IS NULL");
+
+                where.append(" AND time >= ?");
+                argsList.add(String.valueOf(windowStart));
+
+                String sql = "SELECT ID FROM log WHERE " + where.toString() + " ORDER BY time DESC LIMIT 1";
+                String[] args = argsList.toArray(new String[0]);
                 cursor = db.rawQuery(sql, args);
                 if (cursor.moveToFirst()) {
                     foundId = cursor.getLong(0);
