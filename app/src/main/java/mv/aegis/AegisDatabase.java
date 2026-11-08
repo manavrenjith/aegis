@@ -11,24 +11,44 @@ import android.database.sqlite.SQLiteStatement;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.SystemClock;
 import android.util.Log;
+import android.util.LruCache;
 
 import androidx.preference.PreferenceManager;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AegisDatabase extends SQLiteOpenHelper {
     private static final String TAG = "Aegis.Database";
     private static final String DB_NAME = "Aegis";
-    private static final int DB_VERSION = 23;
+    private static final int DB_VERSION = 24;
     private static final int MSG_LOG = 1;
     private static final int MSG_ACCESS = 2;
-    private static final long SYN_SNI_DELAY = 5000L;
+
+    public static final long FLOW_WINDOW_MS = 3_600_000L;
+    public static final long RETENTION_MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000L;
+    public static final int RETENTION_MAX_ROWS = 100_000;
+    public static final int RETENTION_BATCH = 500;
+
+    private static final class FlowCacheEntry {
+        final long rowId;
+        final long windowStart;
+
+        FlowCacheEntry(long rowId, long windowStart) {
+            this.rowId = rowId;
+            this.windowStart = windowStart;
+        }
+    }
+
+    private final LruCache<FirewallService.UidDestKey, FlowCacheEntry> flowCache = new LruCache<>(1000);
 
     private static AegisDatabase dh = null;
     private static final List<LogChangedListener> logChangedListeners = new ArrayList<>();
@@ -94,7 +114,10 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 + "allowed INTEGER,"
                 + "connection INTEGER,"
                 + "interactive INTEGER,"
-                + "threat_type TEXT"
+                + "threat_type TEXT,"
+                + "time_end INTEGER,"
+                + "packet_count INTEGER DEFAULT 1,"
+                + "screen_off_count INTEGER DEFAULT 0"
                 + ")");
 
         db.execSQL("CREATE INDEX idx_log_time ON log(time)");
@@ -304,6 +327,22 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 oldVersion = 23;
             }
 
+            if (oldVersion < 24) {
+                long start = SystemClock.elapsedRealtime();
+                if (!columnExists(db, "log", "time_end")) {
+                    db.execSQL("ALTER TABLE log ADD COLUMN time_end INTEGER");
+                }
+                if (!columnExists(db, "log", "packet_count")) {
+                    db.execSQL("ALTER TABLE log ADD COLUMN packet_count INTEGER DEFAULT 1");
+                }
+                if (!columnExists(db, "log", "screen_off_count")) {
+                    db.execSQL("ALTER TABLE log ADD COLUMN screen_off_count INTEGER DEFAULT 0");
+                }
+                oldVersion = 24;
+                long duration = SystemClock.elapsedRealtime() - start;
+                Log.i(TAG, "Upgraded database to version 24 in " + duration + " ms");
+            }
+
             if (oldVersion == DB_VERSION) {
                 db.setTransactionSuccessful();
             } else {
@@ -328,12 +367,15 @@ public class AegisDatabase extends SQLiteOpenHelper {
 
     public static class LogBatchItem {
         public final Packet packet;
-        public final String dname;
+        public String dname;
         public int connection;
         public boolean interactive;
         public final Usage usage;
         public final ResourceRecord rr;
         public long timestamp;
+        public int packets;
+        public int screenOff;
+        public long time_end;
 
         public LogBatchItem(Packet packet, String dname, int connection, boolean interactive) {
             this.packet = packet;
@@ -343,6 +385,9 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.usage = null;
             this.rr = null;
             this.timestamp = packet != null ? packet.time : System.currentTimeMillis();
+            this.packets = 1;
+            this.screenOff = interactive ? 0 : 1;
+            this.time_end = this.timestamp;
         }
 
         public LogBatchItem(Usage usage, String dname) {
@@ -353,6 +398,9 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.usage = usage;
             this.rr = null;
             this.timestamp = usage != null ? usage.Time : System.currentTimeMillis();
+            this.packets = 1;
+            this.screenOff = 0;
+            this.time_end = this.timestamp;
         }
 
         public LogBatchItem(ResourceRecord rr) {
@@ -363,6 +411,9 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.usage = null;
             this.rr = rr;
             this.timestamp = rr != null ? rr.Time : System.currentTimeMillis();
+            this.packets = 1;
+            this.screenOff = 0;
+            this.time_end = this.timestamp;
         }
 
         public void merge(LogBatchItem other) {
@@ -372,43 +423,173 @@ public class AegisDatabase extends SQLiteOpenHelper {
             if (this.packet == null || other.packet == null) {
                 return;
             }
-            // Preserve first-seen timestamp: do not update this.timestamp or this.packet.time
+            this.packets += other.packets;
+            this.screenOff += other.screenOff;
+            this.timestamp = Math.min(this.timestamp, other.timestamp);
+            if (this.packet != null && other.packet != null) {
+                this.packet.time = Math.min(this.packet.time, other.packet.time);
+                if ("sni".equals(other.packet.data)) {
+                    this.packet.data = "sni";
+                }
+            }
+            long thisEnd = this.time_end > 0 ? this.time_end : this.timestamp;
+            long otherEnd = other.time_end > 0 ? other.time_end : other.timestamp;
+            this.time_end = Math.max(thisEnd, otherEnd);
+            if (this.dname == null && other.dname != null) {
+                this.dname = other.dname;
+            }
             this.interactive = this.interactive || other.interactive;
             this.connection += (other.connection > 0 ? other.connection : 1);
         }
     }
 
-    public void insertLog(Packet packet, String dname, int connection, boolean interactive) {
-        lock.writeLock().lock();
-        try {
-            SQLiteDatabase db = getWritableDatabase();
-            applyLogInternal(db, packet, dname, connection, interactive);
-            notifyLogChanged();
-        } finally {
-            lock.writeLock().unlock();
+    private int updatePacketLog(SQLiteStatement stmt, long rowId, LogBatchItem item) {
+        long timeEnd = item.time_end > 0 ? item.time_end : item.packet.time;
+        stmt.bindLong(1, timeEnd);
+        stmt.bindLong(2, item.packets);
+        stmt.bindLong(3, item.screenOff);
+        if (item.dname != null) {
+            stmt.bindString(4, item.dname);
+        } else {
+            stmt.bindNull(4);
+        }
+        if (item.packet.data != null) {
+            stmt.bindString(5, item.packet.data);
+        } else {
+            stmt.bindNull(5);
+        }
+        stmt.bindLong(6, rowId);
+        return stmt.executeUpdateDelete();
+    }
+
+    private long insertPacketLog(SQLiteDatabase db, LogBatchItem item, int allowedVal) {
+        ContentValues cv = new ContentValues();
+        cv.put("time", item.packet.time);
+        cv.put("version", item.packet.version >= 0 ? item.packet.version : null);
+        cv.put("protocol", item.packet.protocol >= 0 ? item.packet.protocol : null);
+        cv.put("flags", item.packet.flags);
+        cv.put("saddr", item.packet.saddr);
+        cv.put("sport", item.packet.sport >= 0 ? item.packet.sport : null);
+        cv.put("daddr", item.packet.daddr);
+        cv.put("dport", item.packet.dport >= 0 ? item.packet.dport : null);
+        cv.put("dname", item.dname);
+        cv.put("data", item.packet.data);
+        cv.put("uid", item.packet.uid >= 0 ? item.packet.uid : null);
+        cv.put("allowed", allowedVal);
+        cv.put("connection", item.connection);
+        cv.put("interactive", item.interactive ? 1 : 0);
+        long timeEnd = item.time_end > 0 ? item.time_end : item.packet.time;
+        cv.put("time_end", timeEnd);
+        cv.put("packet_count", item.packets);
+        cv.put("screen_off_count", item.screenOff);
+
+        long id = db.insert("log", null, cv);
+        if (id < 0) {
+            Log.e(TAG, "insert log failed");
+        }
+        return id;
+    }
+
+    private void applyAggregatedLogInternal(
+            SQLiteDatabase db,
+            LogBatchItem item,
+            int allowedVal,
+            SQLiteStatement updateStmt,
+            Map<FirewallService.UidDestKey, FlowCacheEntry> pendingCacheUpdates,
+            Set<FirewallService.UidDestKey> pendingCacheEvictions
+    ) {
+        FirewallService.UidDestKey key = FirewallService.getBatchItemKey(item);
+        long packetTime = item.packet.time;
+        long windowStart = packetTime - (packetTime % FLOW_WINDOW_MS);
+
+        FlowCacheEntry cached = pendingCacheUpdates.get(key);
+        if (cached == null && !pendingCacheEvictions.contains(key)) {
+            cached = flowCache.get(key);
+        }
+
+        boolean updated = false;
+        if (cached != null && cached.windowStart == windowStart) {
+            int count = updatePacketLog(updateStmt, cached.rowId, item);
+            if (count > 0) {
+                pendingCacheUpdates.put(key, cached);
+                pendingCacheEvictions.remove(key);
+                updated = true;
+            } else {
+                pendingCacheUpdates.remove(key);
+                pendingCacheEvictions.add(key);
+            }
+        }
+
+        if (!updated) {
+            long foundId = -1;
+            Cursor cursor = null;
+            try {
+                StringBuilder where = new StringBuilder();
+                List<String> argsList = new ArrayList<>();
+
+                if (item.packet.uid >= 0) {
+                    where.append("uid IS ?");
+                    argsList.add(String.valueOf(item.packet.uid));
+                } else {
+                    where.append("uid IS NULL");
+                }
+
+                if (item.packet.daddr != null) {
+                    where.append(" AND daddr = ?");
+                    argsList.add(item.packet.daddr);
+                } else {
+                    where.append(" AND daddr IS NULL");
+                }
+
+                if (item.packet.dport >= 0) {
+                    where.append(" AND dport = ?");
+                    argsList.add(String.valueOf(item.packet.dport));
+                } else {
+                    where.append(" AND dport IS NULL");
+                }
+
+                if (item.packet.protocol >= 0) {
+                    where.append(" AND protocol = ?");
+                    argsList.add(String.valueOf(item.packet.protocol));
+                } else {
+                    where.append(" AND protocol IS NULL");
+                }
+
+                where.append(" AND allowed = ?");
+                argsList.add(String.valueOf(allowedVal));
+
+                where.append(" AND threat_type IS NULL");
+
+                where.append(" AND time >= ?");
+                argsList.add(String.valueOf(windowStart));
+
+                String sql = "SELECT ID FROM log WHERE " + where.toString() + " ORDER BY time DESC LIMIT 1";
+                String[] args = argsList.toArray(new String[0]);
+                cursor = db.rawQuery(sql, args);
+                if (cursor.moveToFirst()) {
+                    foundId = cursor.getLong(0);
+                }
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+
+            if (foundId >= 0) {
+                updatePacketLog(updateStmt, foundId, item);
+                pendingCacheUpdates.put(key, new FlowCacheEntry(foundId, windowStart));
+                pendingCacheEvictions.remove(key);
+            } else {
+                long newId = insertPacketLog(db, item, allowedVal);
+                if (newId >= 0) {
+                    pendingCacheUpdates.put(key, new FlowCacheEntry(newId, windowStart));
+                    pendingCacheEvictions.remove(key);
+                }
+            }
         }
     }
 
     private void applyLogInternal(SQLiteDatabase db, Packet packet, String dname, int connection, boolean interactive) {
-        if (packet.protocol == 6 && "sni".equals(packet.data)) {
-            long from = packet.time - SYN_SNI_DELAY;
-            long to = packet.time + SYN_SNI_DELAY;
-            db.delete(
-                    "log",
-                    "protocol = 6 AND uid = ? AND version = ? AND saddr = ? AND daddr = ? AND dport = ? AND data = ? AND time BETWEEN ? AND ?",
-                    new String[]{
-                            String.valueOf(packet.uid),
-                            String.valueOf(packet.version),
-                            packet.saddr,
-                            packet.daddr,
-                            String.valueOf(packet.dport),
-                            "syn",
-                            String.valueOf(from),
-                            String.valueOf(to)
-                    }
-            );
-        }
-
         ContentValues cv = new ContentValues();
         cv.put("time", packet.time);
         cv.put("version", packet.version >= 0 ? packet.version : null);
@@ -439,8 +620,21 @@ public class AegisDatabase extends SQLiteOpenHelper {
         lock.writeLock().lock();
         boolean hasLogs = false;
         boolean hasUsage = false;
+        Map<FirewallService.UidDestKey, FlowCacheEntry> pendingCacheUpdates = new HashMap<>();
+        Set<FirewallService.UidDestKey> pendingCacheEvictions = new HashSet<>();
+        boolean txSuccess = false;
+        SQLiteStatement updateStmt = null;
         try {
             SQLiteDatabase db = getWritableDatabase();
+            updateStmt = db.compileStatement(
+                    "UPDATE log SET "
+                            + "time_end = max(coalesce(time_end, time), ?), "
+                            + "packet_count = packet_count + ?, "
+                            + "screen_off_count = screen_off_count + ?, "
+                            + "dname = COALESCE(dname, ?), "
+                            + "data = CASE WHEN ? = 'sni' THEN 'sni' ELSE data END "
+                            + "WHERE ID = ?"
+            );
             db.beginTransaction();
             try {
                 for (LogBatchItem item : items) {
@@ -448,15 +642,33 @@ public class AegisDatabase extends SQLiteOpenHelper {
                         applyUsageInternal(db, item.usage, item.dname);
                         hasUsage = true;
                     } else if (item.packet != null) {
-                        applyLogInternal(db, item.packet, item.dname, item.connection, item.interactive);
+                        int allowedVal = (item.packet.hasCustomStatus && item.packet.status >= 0)
+                                ? item.packet.status
+                                : (item.packet.allowed ? 1 : 0);
+
+                        if (allowedVal == 0 || allowedVal == 1) {
+                            applyAggregatedLogInternal(db, item, allowedVal, updateStmt, pendingCacheUpdates, pendingCacheEvictions);
+                        } else {
+                            applyLogInternal(db, item.packet, item.dname, item.connection, item.interactive);
+                        }
                         hasLogs = true;
                     } else if (item.rr != null) {
                         applyDnsInternal(db, item.rr);
                     }
                 }
                 db.setTransactionSuccessful();
+                txSuccess = true;
             } finally {
                 db.endTransaction();
+            }
+
+            if (txSuccess) {
+                for (FirewallService.UidDestKey evictKey : pendingCacheEvictions) {
+                    flowCache.remove(evictKey);
+                }
+                for (Map.Entry<FirewallService.UidDestKey, FlowCacheEntry> entry : pendingCacheUpdates.entrySet()) {
+                    flowCache.put(entry.getKey(), entry.getValue());
+                }
             }
             try {
                 if (hasLogs) {
@@ -469,6 +681,9 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 Log.w(TAG, "Failed to notify listeners after batch commit", t);
             }
         } finally {
+            if (updateStmt != null) {
+                updateStmt.close();
+            }
             lock.writeLock().unlock();
         }
     }
@@ -912,6 +1127,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             } else {
                 db.delete("log", "uid = ?", new String[]{String.valueOf(uid)});
             }
+            flowCache.evictAll();
             db.execSQL("VACUUM");
             notifyLogChanged();
         } finally {
@@ -919,13 +1135,95 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
-    public void cleanupLog(long time) {
+    public interface RetentionGate {
+        boolean keepGoing();
+    }
+
+    public void enforceRetention(long now, RetentionGate gate) {
+        long startTime = SystemClock.elapsedRealtime();
+        int totalDeleted = 0;
+        long cutoffTime = now - RETENTION_MAX_AGE_MS;
+
+        // Phase 1: Delete rows older than RETENTION_MAX_AGE_MS in chunks of RETENTION_BATCH
+        while (gate == null || gate.keepGoing()) {
+            int deleted = 0;
+            lock.writeLock().lock();
+            try {
+                SQLiteDatabase db = getWritableDatabase();
+                SQLiteStatement stmt = db.compileStatement(
+                        "DELETE FROM log WHERE ID IN (SELECT ID FROM log WHERE time < ? LIMIT " + RETENTION_BATCH + ")"
+                );
+                try {
+                    stmt.bindLong(1, cutoffTime);
+                    deleted = stmt.executeUpdateDelete();
+                } finally {
+                    stmt.close();
+                }
+            } finally {
+                lock.writeLock().unlock();
+            }
+            totalDeleted += deleted;
+            if (deleted < RETENTION_BATCH) {
+                break;
+            }
+        }
+
+        // Phase 2: If COUNT(*) exceeds RETENTION_MAX_ROWS, delete oldest rows with threat_type IS NULL in chunks until it fits
+        if (gate == null || gate.keepGoing()) {
+            long totalRows = 0;
+            lock.readLock().lock();
+            try {
+                Cursor cursor = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM log", null);
+                try {
+                    if (cursor.moveToFirst()) {
+                        totalRows = cursor.getLong(0);
+                    }
+                } finally {
+                    cursor.close();
+                }
+            } finally {
+                lock.readLock().unlock();
+            }
+
+            long excess = totalRows - RETENTION_MAX_ROWS;
+            while (excess > 0 && (gate == null || gate.keepGoing())) {
+                int toDelete = (int) Math.min(excess, RETENTION_BATCH);
+                int deleted = 0;
+                lock.writeLock().lock();
+                try {
+                    SQLiteDatabase db = getWritableDatabase();
+                    SQLiteStatement stmt = db.compileStatement(
+                            "DELETE FROM log WHERE ID IN (SELECT ID FROM log WHERE threat_type IS NULL ORDER BY time ASC LIMIT " + toDelete + ")"
+                    );
+                    try {
+                        deleted = stmt.executeUpdateDelete();
+                    } finally {
+                        stmt.close();
+                    }
+                } finally {
+                    lock.writeLock().unlock();
+                }
+                totalDeleted += deleted;
+                excess -= deleted;
+                if (deleted == 0) {
+                    break;
+                }
+            }
+        }
+
         lock.writeLock().lock();
         try {
-            getWritableDatabase().delete("log", "time < ?", new String[]{String.valueOf(time)});
+            flowCache.evictAll();
         } finally {
             lock.writeLock().unlock();
         }
+
+        if (totalDeleted > 0) {
+            notifyLogChanged();
+        }
+
+        long duration = SystemClock.elapsedRealtime() - startTime;
+        Log.i(TAG, "enforceRetention completed in " + duration + " ms, deleted " + totalDeleted + " rows");
     }
 
     public Cursor getUsageByApp() {

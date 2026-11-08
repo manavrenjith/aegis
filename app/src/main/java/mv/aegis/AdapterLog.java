@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.mv.aegis.R;
 
 import java.text.DateFormat;
+import java.util.Calendar;
 import java.util.List;
 
 public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
@@ -89,8 +90,39 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             holder.ivAppIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
         }
 
-        holder.tvTimestamp.setText(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                .format(time));
+        int colPacketCount = cursor.getColumnIndex("packet_count");
+        int packetCount = (colPacketCount >= 0 && !cursor.isNull(colPacketCount)) ? cursor.getInt(colPacketCount) : 1;
+
+        int colScreenOffCount = cursor.getColumnIndex("screen_off_count");
+        int screenOffCount = (colScreenOffCount >= 0 && !cursor.isNull(colScreenOffCount)) ? cursor.getInt(colScreenOffCount) : 0;
+
+        int colTimeEnd = cursor.getColumnIndex("time_end");
+        Long timeEnd = (colTimeEnd >= 0 && !cursor.isNull(colTimeEnd)) ? cursor.getLong(colTimeEnd) : null;
+
+        java.text.DateFormat dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+        StringBuilder sb = new StringBuilder();
+        if (timeEnd != null && timeEnd != time) {
+            String startStr = dateFormat.format(time);
+            String endStr = dateFormat.format(timeEnd);
+            if (startStr.equals(endStr)) {
+                sb.append(startStr);
+            } else if (isSameDay(time, timeEnd)) {
+                sb.append(startStr).append(" - ").append(DateFormat.getTimeInstance(DateFormat.SHORT).format(timeEnd));
+            } else {
+                sb.append(startStr).append(" - ").append(endStr);
+            }
+        } else {
+            sb.append(dateFormat.format(time));
+        }
+
+        if (packetCount > 1) {
+            sb.append("\n\u00d7").append(packetCount).append(" packets");
+            if (screenOffCount > 0) {
+                sb.append(" \u00b7 ").append(screenOffCount).append(" screen-off");
+            }
+        }
+        holder.tvTimestamp.setText(sb.toString());
+        holder.tvTimestamp.setMaxLines(packetCount > 1 ? 3 : 1);
 
         if (allowed == Packet.STATUS_OVERFLOW) {
             int count = cursor.getInt(cursor.getColumnIndexOrThrow("connection"));
@@ -142,6 +174,16 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         drawable.setShape(GradientDrawable.OVAL);
         drawable.setColor(color);
         return drawable;
+    }
+
+    private static boolean isSameDay(long t1, long t2) {
+        Calendar cal1 = Calendar.getInstance();
+        cal1.setTimeInMillis(t1);
+        Calendar cal2 = Calendar.getInstance();
+        cal2.setTimeInMillis(t2);
+        return cal1.get(Calendar.ERA) == cal2.get(Calendar.ERA)
+                && cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR)
+                && cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR);
     }
 
     static class LogViewHolder extends RecyclerView.ViewHolder {
