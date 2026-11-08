@@ -1115,13 +1115,17 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
-    public void enforceRetention(long now) {
+    public interface RetentionGate {
+        boolean keepGoing();
+    }
+
+    public void enforceRetention(long now, RetentionGate gate) {
         long startTime = SystemClock.elapsedRealtime();
         int totalDeleted = 0;
         long cutoffTime = now - RETENTION_MAX_AGE_MS;
 
         // Phase 1: Delete rows older than RETENTION_MAX_AGE_MS in chunks of RETENTION_BATCH
-        while (FirewallService.logBatchRunning) {
+        while (gate == null || gate.keepGoing()) {
             int deleted = 0;
             lock.writeLock().lock();
             try {
@@ -1145,7 +1149,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
 
         // Phase 2: If COUNT(*) exceeds RETENTION_MAX_ROWS, delete oldest rows with threat_type IS NULL in chunks until it fits
-        if (FirewallService.logBatchRunning) {
+        if (gate == null || gate.keepGoing()) {
             long totalRows = 0;
             lock.readLock().lock();
             try {
@@ -1162,7 +1166,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             }
 
             long excess = totalRows - RETENTION_MAX_ROWS;
-            while (excess > 0 && FirewallService.logBatchRunning) {
+            while (excess > 0 && (gate == null || gate.keepGoing())) {
                 int toDelete = (int) Math.min(excess, RETENTION_BATCH);
                 int deleted = 0;
                 lock.writeLock().lock();

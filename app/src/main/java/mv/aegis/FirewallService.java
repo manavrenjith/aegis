@@ -186,7 +186,7 @@ public class FirewallService extends VpnService {
     private volatile long lastStatsWarnTime = 0;
 
     private Thread logBatchThread = null;
-    static volatile boolean logBatchRunning = false;
+    private volatile boolean logBatchRunning = false;
 
     private native long jni_init(int sdk);
 
@@ -1287,7 +1287,7 @@ public class FirewallService extends VpnService {
 
             long nowElapsed = SystemClock.elapsedRealtime();
             if (nowElapsed >= nextRetentionTime) {
-                AegisDatabase.getInstance(this).enforceRetention(System.currentTimeMillis());
+                AegisDatabase.getInstance(this).enforceRetention(System.currentTimeMillis(), () -> logBatchRunning);
                 nextRetentionTime = nowElapsed + 60 * 60 * 1000L;
             }
 
