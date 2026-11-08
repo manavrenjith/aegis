@@ -161,8 +161,10 @@ public class LogActivity extends BaseActivity {
                 .setTitle("Clear log")
                 .setMessage("Delete all log entries?")
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                    AegisDatabase.getInstance(this).clearLog(-1);
-                    refreshLog();
+                    executor.execute(() -> {
+                        AegisDatabase.getInstance(this).clearLog(-1);
+                        handler.post(this::refreshLog);
+                    });
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
