@@ -443,36 +443,23 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
-    private int updatePacketLog(SQLiteDatabase db, long rowId, LogBatchItem item) {
-        SQLiteStatement stmt = db.compileStatement(
-                "UPDATE log SET "
-                        + "time_end = max(coalesce(time_end, time), ?), "
-                        + "packet_count = packet_count + ?, "
-                        + "screen_off_count = screen_off_count + ?, "
-                        + "dname = COALESCE(dname, ?), "
-                        + "data = CASE WHEN ? = 'sni' THEN 'sni' ELSE data END "
-                        + "WHERE ID = ?"
-        );
-        try {
-            long timeEnd = item.time_end > 0 ? item.time_end : item.packet.time;
-            stmt.bindLong(1, timeEnd);
-            stmt.bindLong(2, item.packets);
-            stmt.bindLong(3, item.screenOff);
-            if (item.dname != null) {
-                stmt.bindString(4, item.dname);
-            } else {
-                stmt.bindNull(4);
-            }
-            if (item.packet.data != null) {
-                stmt.bindString(5, item.packet.data);
-            } else {
-                stmt.bindNull(5);
-            }
-            stmt.bindLong(6, rowId);
-            return stmt.executeUpdateDelete();
-        } finally {
-            stmt.close();
+    private int updatePacketLog(SQLiteStatement stmt, long rowId, LogBatchItem item) {
+        long timeEnd = item.time_end > 0 ? item.time_end : item.packet.time;
+        stmt.bindLong(1, timeEnd);
+        stmt.bindLong(2, item.packets);
+        stmt.bindLong(3, item.screenOff);
+        if (item.dname != null) {
+            stmt.bindString(4, item.dname);
+        } else {
+            stmt.bindNull(4);
         }
+        if (item.packet.data != null) {
+            stmt.bindString(5, item.packet.data);
+        } else {
+            stmt.bindNull(5);
+        }
+        stmt.bindLong(6, rowId);
+        return stmt.executeUpdateDelete();
     }
 
     private long insertPacketLog(SQLiteDatabase db, LogBatchItem item, int allowedVal) {
@@ -507,6 +494,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             SQLiteDatabase db,
             LogBatchItem item,
             int allowedVal,
+            SQLiteStatement updateStmt,
             Map<FirewallService.UidDestKey, FlowCacheEntry> pendingCacheUpdates,
             Set<FirewallService.UidDestKey> pendingCacheEvictions
     ) {
@@ -521,7 +509,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
 
         boolean updated = false;
         if (cached != null && cached.windowStart == windowStart) {
-            int count = updatePacketLog(db, cached.rowId, item);
+            int count = updatePacketLog(updateStmt, cached.rowId, item);
             if (count > 0) {
                 pendingCacheUpdates.put(key, cached);
                 pendingCacheEvictions.remove(key);
@@ -588,7 +576,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             }
 
             if (foundId >= 0) {
-                updatePacketLog(db, foundId, item);
+                updatePacketLog(updateStmt, foundId, item);
                 pendingCacheUpdates.put(key, new FlowCacheEntry(foundId, windowStart));
                 pendingCacheEvictions.remove(key);
             } else {
@@ -635,8 +623,18 @@ public class AegisDatabase extends SQLiteOpenHelper {
         Map<FirewallService.UidDestKey, FlowCacheEntry> pendingCacheUpdates = new HashMap<>();
         Set<FirewallService.UidDestKey> pendingCacheEvictions = new HashSet<>();
         boolean txSuccess = false;
+        SQLiteStatement updateStmt = null;
         try {
             SQLiteDatabase db = getWritableDatabase();
+            updateStmt = db.compileStatement(
+                    "UPDATE log SET "
+                            + "time_end = max(coalesce(time_end, time), ?), "
+                            + "packet_count = packet_count + ?, "
+                            + "screen_off_count = screen_off_count + ?, "
+                            + "dname = COALESCE(dname, ?), "
+                            + "data = CASE WHEN ? = 'sni' THEN 'sni' ELSE data END "
+                            + "WHERE ID = ?"
+            );
             db.beginTransaction();
             try {
                 for (LogBatchItem item : items) {
@@ -649,7 +647,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
                                 : (item.packet.allowed ? 1 : 0);
 
                         if (allowedVal == 0 || allowedVal == 1) {
-                            applyAggregatedLogInternal(db, item, allowedVal, pendingCacheUpdates, pendingCacheEvictions);
+                            applyAggregatedLogInternal(db, item, allowedVal, updateStmt, pendingCacheUpdates, pendingCacheEvictions);
                         } else {
                             applyLogInternal(db, item.packet, item.dname, item.connection, item.interactive);
                         }
@@ -683,6 +681,9 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 Log.w(TAG, "Failed to notify listeners after batch commit", t);
             }
         } finally {
+            if (updateStmt != null) {
+                updateStmt.close();
+            }
             lock.writeLock().unlock();
         }
     }
