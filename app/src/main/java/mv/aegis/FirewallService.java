@@ -107,13 +107,19 @@ public class FirewallService extends VpnService {
     private BroadcastReceiver screenReceiver = null;
     private volatile boolean destroyed = false;
 
-    private static final class UidDestKey {
+    static final class UidDestKey {
         final int uid;
         final String dest;
+        final int dport;
+        final int protocol;
+        final int allowed;
 
-        UidDestKey(int uid, String dest) {
+        UidDestKey(int uid, String dest, int dport, int protocol, int allowed) {
             this.uid = uid;
             this.dest = dest != null ? dest : "";
+            this.dport = dport;
+            this.protocol = protocol;
+            this.allowed = allowed;
         }
 
         @Override
@@ -121,12 +127,21 @@ public class FirewallService extends VpnService {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             UidDestKey that = (UidDestKey) o;
-            return uid == that.uid && dest.equals(that.dest);
+            return uid == that.uid &&
+                    dport == that.dport &&
+                    protocol == that.protocol &&
+                    allowed == that.allowed &&
+                    dest.equals(that.dest);
         }
 
         @Override
         public int hashCode() {
-            return 31 * uid + dest.hashCode();
+            int result = uid;
+            result = 31 * result + dest.hashCode();
+            result = 31 * result + dport;
+            result = 31 * result + protocol;
+            result = 31 * result + allowed;
+            return result;
         }
     }
 
@@ -1035,18 +1050,33 @@ public class FirewallService extends VpnService {
         }
     }
 
-    private static UidDestKey getBatchItemKey(AegisDatabase.LogBatchItem item) {
+    static UidDestKey getBatchItemKey(AegisDatabase.LogBatchItem item) {
         if (item.packet != null) {
-            return new UidDestKey(item.packet.uid, item.packet.daddr != null ? item.packet.daddr : "");
+            int allowed = (item.packet.hasCustomStatus && item.packet.status >= 0)
+                    ? item.packet.status
+                    : (item.packet.allowed ? 1 : 0);
+            return new UidDestKey(
+                    item.packet.uid,
+                    item.packet.daddr != null ? item.packet.daddr : "",
+                    item.packet.dport,
+                    item.packet.protocol,
+                    allowed
+            );
         }
         if (item.usage != null) {
-            return new UidDestKey(item.usage.Uid, item.usage.DAddr != null ? item.usage.DAddr : "");
+            return new UidDestKey(
+                    item.usage.Uid,
+                    item.usage.DAddr != null ? item.usage.DAddr : "",
+                    item.usage.DPort,
+                    item.usage.Protocol,
+                    1
+            );
         }
         if (item.rr != null) {
             String d = item.rr.QName != null ? item.rr.QName : (item.rr.Resource != null ? item.rr.Resource : "");
-            return new UidDestKey(item.rr.uid, d);
+            return new UidDestKey(item.rr.uid, d, 0, 0, 1);
         }
-        return new UidDestKey(-1, "");
+        return new UidDestKey(-1, "", 0, 0, 0);
     }
 
     private static int getBatchItemUid(AegisDatabase.LogBatchItem item) {
@@ -1087,6 +1117,8 @@ public class FirewallService extends VpnService {
         boolean interactive = isInteractive;
         item.timestamp = now;
         item.interactive = interactive;
+        item.screenOff = interactive ? 0 : 1;
+        item.time_end = now;
         if (item.packet != null) {
             item.packet.time = now;
         }
@@ -1119,6 +1151,13 @@ public class FirewallService extends VpnService {
                 return;
             }
 
+            AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
+            if (pending != null) {
+                pending.merge(item);
+                mergedCount.incrementAndGet();
+                return;
+            }
+
             int queueSize = logQueue.size();
             if (queueSize < QUEUE_SOFT_CAPACITY) {
                 seenPairs.put(key, Boolean.TRUE);
@@ -1138,25 +1177,13 @@ public class FirewallService extends VpnService {
                     }
                 } else {
                     // Already-seen pair: merge into pending entry if one exists, else drop
-                    AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
-                    if (pending != null) {
-                        pending.merge(item);
-                        mergedCount.incrementAndGet();
-                    } else {
-                        droppedCount.incrementAndGet();
-                    }
+                    droppedCount.incrementAndGet();
                 }
             } else {
                 // At hard cap (queueSize >= QUEUE_HARD_CAPACITY)
                 if (seenPairs.containsKey(key)) {
                     // Already-seen pair: merge into pending entry if exists, else drop
-                    AegisDatabase.LogBatchItem pending = pendingEntries.get(key);
-                    if (pending != null) {
-                        pending.merge(item);
-                        mergedCount.incrementAndGet();
-                    } else {
-                        droppedCount.incrementAndGet();
-                    }
+                    droppedCount.incrementAndGet();
                 } else {
                     // New (uid, destination) pair at hard cap: update per-uid overflow aggregation
                     int itemUid = item.packet != null ? item.packet.uid : -1;
