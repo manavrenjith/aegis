@@ -1115,13 +1115,91 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
-    public void cleanupLog(long time) {
+    public void enforceRetention(long now) {
+        long startTime = SystemClock.elapsedRealtime();
+        int totalDeleted = 0;
+        long cutoffTime = now - RETENTION_MAX_AGE_MS;
+
+        // Phase 1: Delete rows older than RETENTION_MAX_AGE_MS in chunks of RETENTION_BATCH
+        while (FirewallService.logBatchRunning) {
+            int deleted = 0;
+            lock.writeLock().lock();
+            try {
+                SQLiteDatabase db = getWritableDatabase();
+                SQLiteStatement stmt = db.compileStatement(
+                        "DELETE FROM log WHERE ID IN (SELECT ID FROM log WHERE time < ? LIMIT " + RETENTION_BATCH + ")"
+                );
+                try {
+                    stmt.bindLong(1, cutoffTime);
+                    deleted = stmt.executeUpdateDelete();
+                } finally {
+                    stmt.close();
+                }
+            } finally {
+                lock.writeLock().unlock();
+            }
+            totalDeleted += deleted;
+            if (deleted < RETENTION_BATCH) {
+                break;
+            }
+        }
+
+        // Phase 2: If COUNT(*) exceeds RETENTION_MAX_ROWS, delete oldest rows with threat_type IS NULL in chunks until it fits
+        if (FirewallService.logBatchRunning) {
+            long totalRows = 0;
+            lock.readLock().lock();
+            try {
+                Cursor cursor = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM log", null);
+                try {
+                    if (cursor.moveToFirst()) {
+                        totalRows = cursor.getLong(0);
+                    }
+                } finally {
+                    cursor.close();
+                }
+            } finally {
+                lock.readLock().unlock();
+            }
+
+            long excess = totalRows - RETENTION_MAX_ROWS;
+            while (excess > 0 && FirewallService.logBatchRunning) {
+                int toDelete = (int) Math.min(excess, RETENTION_BATCH);
+                int deleted = 0;
+                lock.writeLock().lock();
+                try {
+                    SQLiteDatabase db = getWritableDatabase();
+                    SQLiteStatement stmt = db.compileStatement(
+                            "DELETE FROM log WHERE ID IN (SELECT ID FROM log WHERE threat_type IS NULL ORDER BY time ASC LIMIT " + toDelete + ")"
+                    );
+                    try {
+                        deleted = stmt.executeUpdateDelete();
+                    } finally {
+                        stmt.close();
+                    }
+                } finally {
+                    lock.writeLock().unlock();
+                }
+                totalDeleted += deleted;
+                excess -= deleted;
+                if (deleted == 0) {
+                    break;
+                }
+            }
+        }
+
         lock.writeLock().lock();
         try {
-            getWritableDatabase().delete("log", "time < ?", new String[]{String.valueOf(time)});
+            flowCache.evictAll();
         } finally {
             lock.writeLock().unlock();
         }
+
+        if (totalDeleted > 0) {
+            notifyLogChanged();
+        }
+
+        long duration = SystemClock.elapsedRealtime() - startTime;
+        Log.i(TAG, "enforceRetention completed in " + duration + " ms, deleted " + totalDeleted + " rows");
     }
 
     public Cursor getUsageByApp() {

@@ -186,7 +186,7 @@ public class FirewallService extends VpnService {
     private volatile long lastStatsWarnTime = 0;
 
     private Thread logBatchThread = null;
-    private volatile boolean logBatchRunning = false;
+    static volatile boolean logBatchRunning = false;
 
     private native long jni_init(int sdk);
 
@@ -1202,6 +1202,7 @@ public class FirewallService extends VpnService {
 
     private void runLogBatchWorker() {
         List<AegisDatabase.LogBatchItem> batch = new ArrayList<>(100);
+        long nextRetentionTime = SystemClock.elapsedRealtime() + 5 * 60 * 1000L;
         while (logBatchRunning || !isLogQueueEmpty()) {
             synchronized (logQueueLock) {
                 while (logQueue.isEmpty() && overflowByUid.isEmpty() && logBatchRunning) {
@@ -1282,6 +1283,12 @@ public class FirewallService extends VpnService {
                     }
                 }
                 batch.clear();
+            }
+
+            long nowElapsed = SystemClock.elapsedRealtime();
+            if (nowElapsed >= nextRetentionTime) {
+                AegisDatabase.getInstance(this).enforceRetention(System.currentTimeMillis());
+                nextRetentionTime = nowElapsed + 60 * 60 * 1000L;
             }
 
             checkLogStatsWarning();
