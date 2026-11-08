@@ -89,8 +89,31 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             holder.ivAppIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
         }
 
-        holder.tvTimestamp.setText(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-                .format(time));
+        int colPacketCount = cursor.getColumnIndex("packet_count");
+        int packetCount = (colPacketCount >= 0 && !cursor.isNull(colPacketCount)) ? cursor.getInt(colPacketCount) : 1;
+
+        int colScreenOffCount = cursor.getColumnIndex("screen_off_count");
+        int screenOffCount = (colScreenOffCount >= 0 && !cursor.isNull(colScreenOffCount)) ? cursor.getInt(colScreenOffCount) : 0;
+
+        int colTimeEnd = cursor.getColumnIndex("time_end");
+        Long timeEnd = (colTimeEnd >= 0 && !cursor.isNull(colTimeEnd)) ? cursor.getLong(colTimeEnd) : null;
+
+        java.text.DateFormat dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+        StringBuilder sb = new StringBuilder();
+        if (timeEnd != null && timeEnd != time) {
+            sb.append(dateFormat.format(time)).append(" - ").append(dateFormat.format(timeEnd));
+        } else {
+            sb.append(dateFormat.format(time));
+        }
+
+        if (packetCount > 1) {
+            sb.append("\n\u00d7").append(packetCount).append(" packets");
+            if (screenOffCount > 0) {
+                sb.append(" \u00b7 ").append(screenOffCount).append(" screen-off");
+            }
+        }
+        holder.tvTimestamp.setText(sb.toString());
+        holder.tvTimestamp.setMaxLines(packetCount > 1 ? 2 : 1);
 
         if (allowed == Packet.STATUS_OVERFLOW) {
             int count = cursor.getInt(cursor.getColumnIndexOrThrow("connection"));
