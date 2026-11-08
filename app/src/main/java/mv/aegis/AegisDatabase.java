@@ -11,6 +11,7 @@ import android.database.sqlite.SQLiteStatement;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.preference.PreferenceManager;
@@ -25,7 +26,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class AegisDatabase extends SQLiteOpenHelper {
     private static final String TAG = "Aegis.Database";
     private static final String DB_NAME = "Aegis";
-    private static final int DB_VERSION = 23;
+    private static final int DB_VERSION = 24;
     private static final int MSG_LOG = 1;
     private static final int MSG_ACCESS = 2;
     private static final long SYN_SNI_DELAY = 5000L;
@@ -94,7 +95,10 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 + "allowed INTEGER,"
                 + "connection INTEGER,"
                 + "interactive INTEGER,"
-                + "threat_type TEXT"
+                + "threat_type TEXT,"
+                + "time_end INTEGER,"
+                + "packet_count INTEGER DEFAULT 1,"
+                + "screen_off_count INTEGER DEFAULT 0"
                 + ")");
 
         db.execSQL("CREATE INDEX idx_log_time ON log(time)");
@@ -302,6 +306,22 @@ public class AegisDatabase extends SQLiteOpenHelper {
                 db.execSQL("DROP TABLE IF EXISTS blocklist");
                 createTableBlocklist(db);
                 oldVersion = 23;
+            }
+
+            if (oldVersion < 24) {
+                long start = SystemClock.elapsedRealtime();
+                if (!columnExists(db, "log", "time_end")) {
+                    db.execSQL("ALTER TABLE log ADD COLUMN time_end INTEGER");
+                }
+                if (!columnExists(db, "log", "packet_count")) {
+                    db.execSQL("ALTER TABLE log ADD COLUMN packet_count INTEGER DEFAULT 1");
+                }
+                if (!columnExists(db, "log", "screen_off_count")) {
+                    db.execSQL("ALTER TABLE log ADD COLUMN screen_off_count INTEGER DEFAULT 0");
+                }
+                oldVersion = 24;
+                long duration = SystemClock.elapsedRealtime() - start;
+                Log.i(TAG, "Upgraded database to version 24 in " + duration + " ms");
             }
 
             if (oldVersion == DB_VERSION) {
