@@ -8,6 +8,7 @@ import android.database.Cursor;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
 import android.widget.CheckBox;
@@ -32,6 +33,7 @@ public class LogActivity extends BaseActivity {
 
     private static final String TAG = "Aegis.Log";
     private static final long REFRESH_INTERVAL_MS = 2000L;
+    private static final long DEBOUNCE_INTERVAL_MS = 1000L;
 
     private AdapterLog adapter;
     private RecyclerView rvLog;
@@ -39,10 +41,13 @@ public class LogActivity extends BaseActivity {
     private boolean filterShowUnknown = true;
     private boolean filterShowAllowed = true;
     private boolean filterShowBlocked = true;
+    private long lastRefreshTime = 0L;
+    private boolean refreshScheduled = false;
+    private boolean isStopped = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    private final AegisDatabase.LogChangedListener logChangedListener = this::scheduleRefresh;
+    private final AegisDatabase.LogChangedListener logChangedListener = () -> handler.post(this::scheduleRefresh);
 
     private final BroadcastReceiver rulesReceiver = new BroadcastReceiver() {
         @Override
@@ -54,8 +59,21 @@ public class LogActivity extends BaseActivity {
     private final Runnable refreshRunnable = new Runnable() {
         @Override
         public void run() {
+            if (!isStopped) {
+                scheduleRefresh();
+                handler.postDelayed(this, REFRESH_INTERVAL_MS);
+            }
+        }
+    };
+
+    private final Runnable debouncedRefreshRunnable = new Runnable() {
+        @Override
+        public void run() {
+            refreshScheduled = false;
+            if (isStopped) {
+                return;
+            }
             refreshLog();
-            handler.postDelayed(this, REFRESH_INTERVAL_MS);
         }
     };
 
@@ -93,21 +111,39 @@ public class LogActivity extends BaseActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        isStopped = false;
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        isStopped = false;
         AegisDatabase.getInstance(this).addLogChangedListener(logChangedListener);
         LocalBroadcastManager.getInstance(this)
                 .registerReceiver(rulesReceiver, new IntentFilter(HomeActivity.ACTION_RULES_CHANGED));
         handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS);
-        refreshLog();
+        scheduleRefresh();
     }
 
     @Override
     protected void onPause() {
         handler.removeCallbacks(refreshRunnable);
+        handler.removeCallbacks(debouncedRefreshRunnable);
+        refreshScheduled = false;
         AegisDatabase.getInstance(this).removeLogChangedListener(logChangedListener);
         LocalBroadcastManager.getInstance(this).unregisterReceiver(rulesReceiver);
         super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        isStopped = true;
+        refreshScheduled = false;
+        handler.removeCallbacks(debouncedRefreshRunnable);
+        handler.removeCallbacks(refreshRunnable);
+        super.onStop();
     }
 
     @Override
@@ -122,11 +158,28 @@ public class LogActivity extends BaseActivity {
         tvDisabled.setVisibility(enabled ? View.GONE : View.VISIBLE);
     }
 
+    // Must be called on the main thread.
     private void scheduleRefresh() {
-        handler.post(this::refreshLog);
+        if (isStopped) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        long elapsed = now - lastRefreshTime;
+        if (elapsed >= DEBOUNCE_INTERVAL_MS) {
+            if (!refreshScheduled) {
+                refreshLog();
+            }
+        } else if (!refreshScheduled) {
+            refreshScheduled = true;
+            handler.postDelayed(debouncedRefreshRunnable, DEBOUNCE_INTERVAL_MS - elapsed);
+        }
     }
 
     private void refreshLog() {
+        if (isStopped) {
+            return;
+        }
+        lastRefreshTime = SystemClock.elapsedRealtime();
         updateDisabledBanner();
         executor.execute(() -> {
             Cursor cursor = null;
@@ -142,9 +195,44 @@ public class LogActivity extends BaseActivity {
 
                 final Cursor result = cursor;
                 handler.post(() -> {
+                    LinearLayoutManager lm = (LinearLayoutManager) rvLog.getLayoutManager();
+                    int firstPos = lm != null ? lm.findFirstVisibleItemPosition() : 0;
+                    int offset = 0;
+                    long rowId = RecyclerView.NO_ID;
+                    int oldCount = 0;
+                    if (firstPos > 0 && lm != null) {
+                        View firstView = lm.findViewByPosition(firstPos);
+                        offset = firstView != null ? firstView.getTop() : 0;
+                        rowId = adapter.getItemId(firstPos);
+                        oldCount = adapter.getItemCount();
+                    }
+
                     adapter.swapCursor(result);
-                    if (adapter.getItemCount() > 0) {
-                        rvLog.scrollToPosition(0);
+
+                    if (lm != null) {
+                        int newCount = adapter.getItemCount();
+                        if (firstPos <= 0) {
+                            if (newCount > 0) {
+                                rvLog.scrollToPosition(0);
+                            }
+                        } else {
+                            int foundPos = -1;
+                            if (rowId != RecyclerView.NO_ID) {
+                                int maxSearch = Math.min(newCount, firstPos + (newCount - oldCount) + 50);
+                                for (int i = firstPos; i < maxSearch; i++) {
+                                    if (adapter.getItemId(i) == rowId) {
+                                        foundPos = i;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (foundPos >= 0) {
+                                lm.scrollToPositionWithOffset(foundPos, offset);
+                            } else if (newCount > 0) {
+                                int clampedPos = Math.max(0, Math.min(firstPos, newCount - 1));
+                                lm.scrollToPositionWithOffset(clampedPos, offset);
+                            }
+                        }
                     }
                 });
             } catch (Throwable throwable) {
@@ -163,7 +251,7 @@ public class LogActivity extends BaseActivity {
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                     executor.execute(() -> {
                         AegisDatabase.getInstance(this).clearLog(-1);
-                        handler.post(this::refreshLog);
+                        handler.post(this::scheduleRefresh);
                     });
                 })
                 .setNegativeButton(android.R.string.cancel, null)
@@ -188,7 +276,7 @@ public class LogActivity extends BaseActivity {
                     filterShowUnknown = cbFilterUnknown.isChecked();
                     filterShowAllowed = cbFilterAllowed.isChecked();
                     filterShowBlocked = cbFilterBlocked.isChecked();
-                    refreshLog();
+                    scheduleRefresh();
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
