@@ -20,15 +20,30 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.mv.aegis.R;
 
 import java.text.DateFormat;
-import java.util.Calendar;
 import java.util.List;
+import java.util.TimeZone;
 
 public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
 
     private final Context context;
     private final LayoutInflater inflater;
     private final PackageManager packageManager;
+    private final DateFormat dateTimeFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+    private final DateFormat timeFormat = DateFormat.getTimeInstance(DateFormat.SHORT);
+    private static final long DAY_IN_MILLIS = 86400000L;
+
     private Cursor cursor;
+    private int colId = -1;
+    private int colUid = -1;
+    private int colDaddr = -1;
+    private int colDname = -1;
+    private int colDport = -1;
+    private int colTime = -1;
+    private int colAllowed = -1;
+    private int colPacketCount = -1;
+    private int colScreenOffCount = -1;
+    private int colTimeEnd = -1;
+    private int colConnection = -1;
 
     public AdapterLog(Context context) {
         this.context = context;
@@ -40,6 +55,31 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
     public void swapCursor(Cursor newCursor) {
         Cursor oldCursor = cursor;
         cursor = newCursor;
+        if (newCursor != null && !newCursor.isClosed()) {
+            colId = newCursor.getColumnIndex("_id");
+            colUid = newCursor.getColumnIndex("uid");
+            colDaddr = newCursor.getColumnIndex("daddr");
+            colDname = newCursor.getColumnIndex("dname");
+            colDport = newCursor.getColumnIndex("dport");
+            colTime = newCursor.getColumnIndex("time");
+            colAllowed = newCursor.getColumnIndex("allowed");
+            colPacketCount = newCursor.getColumnIndex("packet_count");
+            colScreenOffCount = newCursor.getColumnIndex("screen_off_count");
+            colTimeEnd = newCursor.getColumnIndex("time_end");
+            colConnection = newCursor.getColumnIndex("connection");
+        } else {
+            colId = -1;
+            colUid = -1;
+            colDaddr = -1;
+            colDname = -1;
+            colDport = -1;
+            colTime = -1;
+            colAllowed = -1;
+            colPacketCount = -1;
+            colScreenOffCount = -1;
+            colTimeEnd = -1;
+            colConnection = -1;
+        }
         notifyDataSetChanged();
         if (oldCursor != null && oldCursor != newCursor && !oldCursor.isClosed()) {
             oldCursor.close();
@@ -59,14 +99,13 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             return;
         }
 
-        int colUid = cursor.getColumnIndexOrThrow("uid");
-        boolean isNullUid = cursor.isNull(colUid);
+        boolean isNullUid = colUid < 0 || cursor.isNull(colUid);
         int uid = isNullUid ? -1 : cursor.getInt(colUid);
-        String daddr = cursor.getString(cursor.getColumnIndexOrThrow("daddr"));
-        String dname = cursor.getString(cursor.getColumnIndexOrThrow("dname"));
-        int dport = cursor.getInt(cursor.getColumnIndexOrThrow("dport"));
-        long time = cursor.getLong(cursor.getColumnIndexOrThrow("time"));
-        int allowed = cursor.getInt(cursor.getColumnIndexOrThrow("allowed"));
+        String daddr = colDaddr >= 0 ? cursor.getString(colDaddr) : null;
+        String dname = colDname >= 0 ? cursor.getString(colDname) : null;
+        int dport = colDport >= 0 ? cursor.getInt(colDport) : 0;
+        long time = colTime >= 0 ? cursor.getLong(colTime) : 0L;
+        int allowed = colAllowed >= 0 ? cursor.getInt(colAllowed) : 0;
 
         try {
             String appName;
@@ -90,29 +129,23 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             holder.ivAppIcon.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_security_white_24dp));
         }
 
-        int colPacketCount = cursor.getColumnIndex("packet_count");
         int packetCount = (colPacketCount >= 0 && !cursor.isNull(colPacketCount)) ? cursor.getInt(colPacketCount) : 1;
-
-        int colScreenOffCount = cursor.getColumnIndex("screen_off_count");
         int screenOffCount = (colScreenOffCount >= 0 && !cursor.isNull(colScreenOffCount)) ? cursor.getInt(colScreenOffCount) : 0;
-
-        int colTimeEnd = cursor.getColumnIndex("time_end");
         Long timeEnd = (colTimeEnd >= 0 && !cursor.isNull(colTimeEnd)) ? cursor.getLong(colTimeEnd) : null;
 
-        java.text.DateFormat dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
         StringBuilder sb = new StringBuilder();
         if (timeEnd != null && timeEnd != time) {
-            String startStr = dateFormat.format(time);
-            String endStr = dateFormat.format(timeEnd);
+            String startStr = dateTimeFormat.format(time);
+            String endStr = dateTimeFormat.format(timeEnd);
             if (startStr.equals(endStr)) {
                 sb.append(startStr);
             } else if (isSameDay(time, timeEnd)) {
-                sb.append(startStr).append(" - ").append(DateFormat.getTimeInstance(DateFormat.SHORT).format(timeEnd));
+                sb.append(startStr).append(" - ").append(timeFormat.format(timeEnd));
             } else {
                 sb.append(startStr).append(" - ").append(endStr);
             }
         } else {
-            sb.append(dateFormat.format(time));
+            sb.append(dateTimeFormat.format(time));
         }
 
         if (packetCount > 1) {
@@ -125,7 +158,7 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         holder.tvTimestamp.setMaxLines(packetCount > 1 ? 3 : 1);
 
         if (allowed == Packet.STATUS_OVERFLOW) {
-            int count = cursor.getInt(cursor.getColumnIndexOrThrow("connection"));
+            int count = colConnection >= 0 ? cursor.getInt(colConnection) : 0;
             holder.tvDomain.setText(count + " more destinations");
             holder.vDot.setBackground(buildDot(ContextCompat.getColor(context, R.color.color_label_tertiary)));
         } else {
@@ -153,8 +186,7 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         if (cursor == null || !cursor.moveToPosition(position)) {
             return RecyclerView.NO_ID;
         }
-        int idIndex = cursor.getColumnIndex("_id");
-        return idIndex >= 0 ? cursor.getLong(idIndex) : position;
+        return colId >= 0 ? cursor.getLong(colId) : position;
     }
 
     private Drawable resolveIcon(int uid) {
@@ -177,13 +209,8 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
     }
 
     private static boolean isSameDay(long t1, long t2) {
-        Calendar cal1 = Calendar.getInstance();
-        cal1.setTimeInMillis(t1);
-        Calendar cal2 = Calendar.getInstance();
-        cal2.setTimeInMillis(t2);
-        return cal1.get(Calendar.ERA) == cal2.get(Calendar.ERA)
-                && cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR)
-                && cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR);
+        TimeZone tz = TimeZone.getDefault();
+        return (t1 + tz.getOffset(t1)) / DAY_IN_MILLIS == (t2 + tz.getOffset(t2)) / DAY_IN_MILLIS;
     }
 
     static class LogViewHolder extends RecyclerView.ViewHolder {
