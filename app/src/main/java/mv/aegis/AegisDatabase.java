@@ -387,8 +387,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.usage = null;
             this.rr = null;
             this.timestamp = packet != null ? packet.time : System.currentTimeMillis();
-            this.packets = 1;
-            this.screenOff = interactive ? 0 : 1;
+            this.packets = (packet != null && packet.count > 1) ? packet.count : 1;
+            this.screenOff = interactive ? 0 : packets;
             this.time_end = this.timestamp;
         }
 
@@ -429,8 +429,8 @@ public class AegisDatabase extends SQLiteOpenHelper {
             this.usage = null;
             this.rr = null;
             this.timestamp = packet != null ? packet.time : System.currentTimeMillis();
-            this.packets = 1;
-            this.screenOff = interactive ? 0 : 1;
+            this.packets = (packet != null && packet.count > 1) ? packet.count : 1;
+            this.screenOff = interactive ? 0 : packets;
             this.time_end = this.timestamp;
         }
 
