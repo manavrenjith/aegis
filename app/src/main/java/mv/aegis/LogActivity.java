@@ -142,9 +142,21 @@ public class LogActivity extends BaseActivity {
 
                 final Cursor result = cursor;
                 handler.post(() -> {
+                    LinearLayoutManager lm = (LinearLayoutManager) rvLog.getLayoutManager();
+                    int firstPos = lm != null ? lm.findFirstVisibleItemPosition() : 0;
+                    View firstView = (firstPos > 0 && lm != null) ? lm.findViewByPosition(firstPos) : null;
+                    int offset = firstView != null ? firstView.getTop() : 0;
+
                     adapter.swapCursor(result);
-                    if (adapter.getItemCount() > 0) {
-                        rvLog.scrollToPosition(0);
+
+                    if (lm != null) {
+                        if (firstPos <= 0) {
+                            if (adapter.getItemCount() > 0) {
+                                rvLog.scrollToPosition(0);
+                            }
+                        } else {
+                            lm.scrollToPositionWithOffset(firstPos, offset);
+                        }
                     }
                 });
             } catch (Throwable throwable) {
