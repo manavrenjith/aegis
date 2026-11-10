@@ -197,18 +197,41 @@ public class LogActivity extends BaseActivity {
                 handler.post(() -> {
                     LinearLayoutManager lm = (LinearLayoutManager) rvLog.getLayoutManager();
                     int firstPos = lm != null ? lm.findFirstVisibleItemPosition() : 0;
-                    View firstView = (firstPos > 0 && lm != null) ? lm.findViewByPosition(firstPos) : null;
-                    int offset = firstView != null ? firstView.getTop() : 0;
+                    int offset = 0;
+                    long rowId = RecyclerView.NO_ID;
+                    int oldCount = 0;
+                    if (firstPos > 0 && lm != null) {
+                        View firstView = lm.findViewByPosition(firstPos);
+                        offset = firstView != null ? firstView.getTop() : 0;
+                        rowId = adapter.getItemId(firstPos);
+                        oldCount = adapter.getItemCount();
+                    }
 
                     adapter.swapCursor(result);
 
                     if (lm != null) {
+                        int newCount = adapter.getItemCount();
                         if (firstPos <= 0) {
-                            if (adapter.getItemCount() > 0) {
+                            if (newCount > 0) {
                                 rvLog.scrollToPosition(0);
                             }
                         } else {
-                            lm.scrollToPositionWithOffset(firstPos, offset);
+                            int foundPos = -1;
+                            if (rowId != RecyclerView.NO_ID) {
+                                int maxSearch = Math.min(newCount, firstPos + (newCount - oldCount) + 50);
+                                for (int i = firstPos; i < maxSearch; i++) {
+                                    if (adapter.getItemId(i) == rowId) {
+                                        foundPos = i;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (foundPos >= 0) {
+                                lm.scrollToPositionWithOffset(foundPos, offset);
+                            } else if (newCount > 0) {
+                                int clampedPos = Math.max(0, Math.min(firstPos, newCount - 1));
+                                lm.scrollToPositionWithOffset(clampedPos, offset);
+                            }
                         }
                     }
                 });
