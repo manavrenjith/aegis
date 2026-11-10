@@ -47,7 +47,7 @@ public class LogActivity extends BaseActivity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    private final AegisDatabase.LogChangedListener logChangedListener = this::scheduleRefresh;
+    private final AegisDatabase.LogChangedListener logChangedListener = () -> handler.post(this::scheduleRefresh);
 
     private final BroadcastReceiver rulesReceiver = new BroadcastReceiver() {
         @Override
@@ -158,6 +158,7 @@ public class LogActivity extends BaseActivity {
         tvDisabled.setVisibility(enabled ? View.GONE : View.VISIBLE);
     }
 
+    // Must be called on the main thread.
     private void scheduleRefresh() {
         if (isStopped) {
             return;
