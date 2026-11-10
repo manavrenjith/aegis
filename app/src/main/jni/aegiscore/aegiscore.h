@@ -601,6 +601,8 @@ int flow_log_absorb(const struct arguments *args,
 
 void flow_log_flush(const struct arguments *args, long long now_ms);
 
+extern jfieldID fidCount;
+
 void account_usage(const struct arguments *args, jint version, jint protocol,
                    const char *daddr, jint dport, jint uid, jlong sent, jlong received);
 

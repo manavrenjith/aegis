@@ -33,6 +33,8 @@ static void flush_flow_entry(const struct arguments *args, struct flow_log_entry
                 e->saddr, e->sport, e->daddr, e->dport,
                 "", e->uid, e->allowed);
         if (pkt != NULL) {
+            if (fidCount != NULL)
+                (*args->env)->SetIntField(args->env, pkt, fidCount, (jint) e->count);
             log_packet(args, pkt);
         }
         e->count = 0;
@@ -157,6 +159,18 @@ int flow_log_absorb(const struct arguments *args,
 void flow_log_flush(const struct arguments *args, long long now_ms) {
     if (args == NULL || args->ctx == NULL || args->ctx->flow_table == NULL)
         return;
+
+    for (size_t i = 0; i < args->ctx->flow_table_size; i++) {
+        struct flow_log_entry *e = &args->ctx->flow_table[i];
+        if (!e->used)
+            continue;
+
+        if (e->count > 0) {
+            flush_flow_entry(args, e);
+        } else if (now_ms - e->last_seen > 60000LL) {
+            e->used = 0;
+        }
+    }
 }
 
 void *handle_events(void *a) {
@@ -223,6 +237,7 @@ void *handle_events(void *a) {
 
     // Loop
     long long last_check = 0;
+    long long last_flow_flush = 0;
     while (!args->ctx->stopping) {
         log_android(ANDROID_LOG_DEBUG, "Loop");
 
@@ -255,6 +270,11 @@ void *handle_events(void *a) {
         long long ms = get_ms();
         if (ms - last_check > EPOLL_MIN_CHECK) {
             last_check = ms;
+
+            if (ms - last_flow_flush >= 1000) {
+                last_flow_flush = ms;
+                flow_log_flush(args, ms);
+            }
 
             time_t now = time(NULL);
             struct ng_session *sl = NULL;
