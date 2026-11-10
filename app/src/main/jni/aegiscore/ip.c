@@ -34,11 +34,17 @@ int check_tun(const struct arguments *args,
 
     // Check tun read
     if (ev->events & EPOLLIN) {
-        uint8_t *buffer = ng_malloc(get_mtu(), "tun read");
-        ssize_t length = read(args->tun, buffer, get_mtu());
-        if (length < 0) {
-            ng_free(buffer, __FILE__, __LINE__);
+        uint16_t mtu = get_mtu();
+        if (args->ctx->tun_buffer == NULL || args->ctx->tun_buffer_size < mtu) {
+            if (args->ctx->tun_buffer != NULL)
+                ng_free(args->ctx->tun_buffer, __FILE__, __LINE__);
+            args->ctx->tun_buffer = ng_malloc(mtu, "tun read");
+            args->ctx->tun_buffer_size = mtu;
+        }
 
+        uint8_t *buffer = args->ctx->tun_buffer;
+        ssize_t length = read(args->tun, buffer, mtu);
+        if (length < 0) {
             log_android(ANDROID_LOG_ERROR, "tun %d read error %d: %s",
                         args->tun, errno, strerror(errno));
             if (errno == EINTR || errno == EAGAIN)
@@ -61,12 +67,8 @@ int check_tun(const struct arguments *args,
 
             // Handle IP from tun
             handle_ip(args, buffer, (size_t) length, epoll_fd, sessions, maxsessions);
-
-            ng_free(buffer, __FILE__, __LINE__);
         } else {
             // tun eof
-            ng_free(buffer, __FILE__, __LINE__);
-
             log_android(ANDROID_LOG_ERROR, "tun %d empty read", args->tun);
             report_exit(args, "tun %d empty read", args->tun);
             return -1;

@@ -2,6 +2,11 @@
 #include "aegiscore.h"
 
 void clear(struct context *ctx) {
+    if (ctx->tun_buffer != NULL) {
+        ng_free(ctx->tun_buffer, __FILE__, __LINE__);
+        ctx->tun_buffer = NULL;
+        ctx->tun_buffer_size = 0;
+    }
     struct ng_session *s = ctx->ng_session;
     while (s != NULL) {
         if (s->socket >= 0 && close(s->socket))
@@ -19,6 +24,14 @@ void clear(struct context *ctx) {
 void *handle_events(void *a) {
     struct arguments *args = (struct arguments *) a;
     log_android(ANDROID_LOG_WARN, "Start events tun=%d", args->tun);
+
+    uint16_t mtu = get_mtu();
+    if (args->ctx->tun_buffer == NULL || args->ctx->tun_buffer_size < mtu) {
+        if (args->ctx->tun_buffer != NULL)
+            ng_free(args->ctx->tun_buffer, __FILE__, __LINE__);
+        args->ctx->tun_buffer = ng_malloc(mtu, "tun read");
+        args->ctx->tun_buffer_size = mtu;
+    }
 
     // Get max number of sessions
     int maxsessions = SESSION_MAX;
