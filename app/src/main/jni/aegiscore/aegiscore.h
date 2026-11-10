@@ -85,6 +85,8 @@ struct context {
     struct ng_session *ng_session;
     int uid_cache_size;
     struct uid_cache_entry *uid_cache;
+    uint8_t *tun_buffer;
+    size_t tun_buffer_size;
 };
 
 struct arguments {
