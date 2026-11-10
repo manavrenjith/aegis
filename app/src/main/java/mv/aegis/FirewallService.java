@@ -915,7 +915,6 @@ public class FirewallService extends VpnService {
     }
 
     public Allowed isAddressAllowed(Packet packet) {
-        Log.d(TAG, "isAddressAllowed called for uid=" + packet.uid);
         if (packet == null) {
             return null;
         }
