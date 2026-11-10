@@ -8,6 +8,7 @@ import android.database.Cursor;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
 import android.widget.CheckBox;
@@ -32,6 +33,7 @@ public class LogActivity extends BaseActivity {
 
     private static final String TAG = "Aegis.Log";
     private static final long REFRESH_INTERVAL_MS = 2000L;
+    private static final long DEBOUNCE_INTERVAL_MS = 1000L;
 
     private AdapterLog adapter;
     private RecyclerView rvLog;
@@ -39,6 +41,9 @@ public class LogActivity extends BaseActivity {
     private boolean filterShowUnknown = true;
     private boolean filterShowAllowed = true;
     private boolean filterShowBlocked = true;
+    private long lastRefreshTime = 0L;
+    private boolean refreshScheduled = false;
+    private boolean isStopped = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -54,8 +59,21 @@ public class LogActivity extends BaseActivity {
     private final Runnable refreshRunnable = new Runnable() {
         @Override
         public void run() {
+            if (!isStopped) {
+                scheduleRefresh();
+                handler.postDelayed(this, REFRESH_INTERVAL_MS);
+            }
+        }
+    };
+
+    private final Runnable debouncedRefreshRunnable = new Runnable() {
+        @Override
+        public void run() {
+            refreshScheduled = false;
+            if (isStopped) {
+                return;
+            }
             refreshLog();
-            handler.postDelayed(this, REFRESH_INTERVAL_MS);
         }
     };
 
@@ -93,21 +111,39 @@ public class LogActivity extends BaseActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        isStopped = false;
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        isStopped = false;
         AegisDatabase.getInstance(this).addLogChangedListener(logChangedListener);
         LocalBroadcastManager.getInstance(this)
                 .registerReceiver(rulesReceiver, new IntentFilter(HomeActivity.ACTION_RULES_CHANGED));
         handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS);
-        refreshLog();
+        scheduleRefresh();
     }
 
     @Override
     protected void onPause() {
         handler.removeCallbacks(refreshRunnable);
+        handler.removeCallbacks(debouncedRefreshRunnable);
+        refreshScheduled = false;
         AegisDatabase.getInstance(this).removeLogChangedListener(logChangedListener);
         LocalBroadcastManager.getInstance(this).unregisterReceiver(rulesReceiver);
         super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        isStopped = true;
+        refreshScheduled = false;
+        handler.removeCallbacks(debouncedRefreshRunnable);
+        handler.removeCallbacks(refreshRunnable);
+        super.onStop();
     }
 
     @Override
@@ -123,10 +159,26 @@ public class LogActivity extends BaseActivity {
     }
 
     private void scheduleRefresh() {
-        handler.post(this::refreshLog);
+        if (isStopped) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        long elapsed = now - lastRefreshTime;
+        if (elapsed >= DEBOUNCE_INTERVAL_MS) {
+            if (!refreshScheduled) {
+                refreshLog();
+            }
+        } else if (!refreshScheduled) {
+            refreshScheduled = true;
+            handler.postDelayed(debouncedRefreshRunnable, DEBOUNCE_INTERVAL_MS - elapsed);
+        }
     }
 
     private void refreshLog() {
+        if (isStopped) {
+            return;
+        }
+        lastRefreshTime = SystemClock.elapsedRealtime();
         updateDisabledBanner();
         executor.execute(() -> {
             Cursor cursor = null;
@@ -175,7 +227,7 @@ public class LogActivity extends BaseActivity {
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                     executor.execute(() -> {
                         AegisDatabase.getInstance(this).clearLog(-1);
-                        handler.post(this::refreshLog);
+                        handler.post(this::scheduleRefresh);
                     });
                 })
                 .setNegativeButton(android.R.string.cancel, null)
@@ -200,7 +252,7 @@ public class LogActivity extends BaseActivity {
                     filterShowUnknown = cbFilterUnknown.isChecked();
                     filterShowAllowed = cbFilterAllowed.isChecked();
                     filterShowBlocked = cbFilterBlocked.isChecked();
-                    refreshLog();
+                    scheduleRefresh();
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
