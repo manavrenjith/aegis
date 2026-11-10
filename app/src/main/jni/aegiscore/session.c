@@ -109,6 +109,7 @@ int flow_log_absorb(const struct arguments *args,
         if (!is_sni) {
             table[match_idx].count++;
             table[match_idx].last_seen = get_ms();
+            args->ctx->flow_dirty = 1;
             return 1;
         }
 
@@ -171,6 +172,8 @@ void flow_log_flush(const struct arguments *args, long long now_ms) {
             e->used = 0;
         }
     }
+
+    args->ctx->flow_dirty = 0;
 }
 
 void *handle_events(void *a) {
@@ -238,6 +241,7 @@ void *handle_events(void *a) {
     // Loop
     long long last_check = 0;
     long long last_flow_flush = 0;
+    int flow_timeout_wake = 0;
     while (!args->ctx->stopping) {
         log_android(ANDROID_LOG_DEBUG, "Loop");
 
@@ -268,13 +272,14 @@ void *handle_events(void *a) {
 
         // Check sessions
         long long ms = get_ms();
-        if (ms - last_check > EPOLL_MIN_CHECK) {
+        if (ms - last_check > EPOLL_MIN_CHECK || flow_timeout_wake) {
             last_check = ms;
 
-            if (ms - last_flow_flush >= 1000) {
+            if (ms - last_flow_flush >= 1000 || flow_timeout_wake) {
                 last_flow_flush = ms;
                 flow_log_flush(args, ms);
             }
+            flow_timeout_wake = 0;
 
             time_t now = time(NULL);
             struct ng_session *sl = NULL;
@@ -333,11 +338,18 @@ void *handle_events(void *a) {
                     isessions, usessions, tsessions, sessions, maxsessions, timeout, recheck);
 
         // Poll
+        int wait_ms = recheck ? EPOLL_MIN_CHECK : timeout * 1000;
+        int flow_wait = 0;
+        if (args->ctx->flow_dirty && (wait_ms > 1000 || wait_ms < 0)) {
+            wait_ms = 1000;
+            flow_wait = 1;
+        }
+
         struct epoll_event ev[EPOLL_EVENTS];
-        int ready = epoll_wait(epoll_fd, ev, EPOLL_EVENTS,
-                               recheck ? EPOLL_MIN_CHECK : timeout * 1000);
+        int ready = epoll_wait(epoll_fd, ev, EPOLL_EVENTS, wait_ms);
 
         if (ready < 0) {
+            flow_timeout_wake = 0;
             if (errno == EINTR) {
                 log_android(ANDROID_LOG_DEBUG, "epoll interrupted tun %d", args->tun);
                 continue;
@@ -351,9 +363,12 @@ void *handle_events(void *a) {
             }
         }
 
-        if (ready == 0)
+        if (ready == 0) {
             log_android(ANDROID_LOG_DEBUG, "epoll timeout");
-        else {
+            if (flow_wait)
+                flow_timeout_wake = 1;
+        } else {
+            flow_timeout_wake = 0;
 
             if (pthread_mutex_lock(&args->ctx->lock))
                 log_android(ANDROID_LOG_ERROR, "pthread_mutex_lock failed");

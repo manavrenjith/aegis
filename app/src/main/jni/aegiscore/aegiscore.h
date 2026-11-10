@@ -106,6 +106,7 @@ struct context {
     size_t tun_buffer_size;
     struct flow_log_entry *flow_table;
     size_t flow_table_size;
+    int flow_dirty;
 };
 
 struct arguments {
