@@ -7,6 +7,11 @@ void clear(struct context *ctx) {
         ctx->tun_buffer = NULL;
         ctx->tun_buffer_size = 0;
     }
+    if (ctx->flow_table != NULL) {
+        ng_free(ctx->flow_table, __FILE__, __LINE__);
+        ctx->flow_table = NULL;
+        ctx->flow_table_size = 0;
+    }
     struct ng_session *s = ctx->ng_session;
     while (s != NULL) {
         if (s->socket >= 0 && close(s->socket))
@@ -21,6 +26,139 @@ void clear(struct context *ctx) {
     ctx->ng_session = NULL;
 }
 
+static void flush_flow_entry(const struct arguments *args, struct flow_log_entry *e) {
+    if (e->used && e->count > 0) {
+        jobject pkt = create_packet(
+                args, e->version, e->protocol, e->flags,
+                e->saddr, e->sport, e->daddr, e->dport,
+                "", e->uid, e->allowed);
+        if (pkt != NULL) {
+            log_packet(args, pkt);
+        }
+        e->count = 0;
+    }
+}
+
+int flow_log_absorb(const struct arguments *args,
+                    jint version,
+                    jint protocol,
+                    const char *flags,
+                    const char *source,
+                    jint sport,
+                    const char *dest,
+                    jint dport,
+                    const char *data,
+                    jint uid,
+                    jboolean allowed) {
+    if (args == NULL || args->ctx == NULL || args->ctx->flow_table == NULL || args->ctx->flow_table_size == 0)
+        return 0;
+
+    int is_sni = (data != NULL && strcmp(data, "sni") == 0);
+    const char *daddr = (dest != NULL) ? dest : "";
+
+    // 32-bit FNV-1a hash of the key: (uid, protocol, dport, allowed, daddr string)
+    uint32_t hash = 2166136261u;
+    hash ^= (uint32_t) uid;
+    hash *= 16777619u;
+    hash ^= (uint32_t) protocol;
+    hash *= 16777619u;
+    hash ^= (uint32_t) dport;
+    hash *= 16777619u;
+    hash ^= (uint32_t) (allowed ? 1 : 0);
+    hash *= 16777619u;
+    for (const char *p = daddr; *p; p++) {
+        hash ^= (uint8_t) *p;
+        hash *= 16777619u;
+    }
+
+    struct flow_log_entry *table = args->ctx->flow_table;
+    size_t table_size = args->ctx->flow_table_size;
+    uint32_t base = hash % table_size;
+
+    int match_idx = -1;
+    int empty_idx = -1;
+    int oldest_idx = -1;
+    long long oldest_time = 0;
+
+    for (int i = 0; i < 8; i++) {
+        int idx = (int) ((base + i) % table_size);
+        struct flow_log_entry *e = &table[idx];
+        if (e->used) {
+            if (e->uid == uid &&
+                e->protocol == protocol &&
+                e->dport == dport &&
+                e->allowed == allowed &&
+                strcmp(e->daddr, daddr) == 0) {
+                match_idx = idx;
+                break;
+            }
+            if (oldest_idx == -1 || e->last_seen < oldest_time) {
+                oldest_idx = idx;
+                oldest_time = e->last_seen;
+            }
+        } else {
+            if (empty_idx == -1) {
+                empty_idx = idx;
+            }
+        }
+    }
+
+    if (match_idx != -1) {
+        if (!is_sni) {
+            table[match_idx].count++;
+            table[match_idx].last_seen = get_ms();
+            return 1;
+        }
+
+        // SNI packet: cannot absorb, must cross JNI.
+        // Flush any prior counts so they aren't lost, then refresh the entry.
+        flush_flow_entry(args, &table[match_idx]);
+        struct flow_log_entry *e = &table[match_idx];
+        e->version = version;
+        e->sport = sport;
+        strncpy(e->saddr, (source != NULL) ? source : "", sizeof(e->saddr) - 1);
+        e->saddr[sizeof(e->saddr) - 1] = '\0';
+        strncpy(e->flags, (flags != NULL) ? flags : "", sizeof(e->flags) - 1);
+        e->flags[sizeof(e->flags) - 1] = '\0';
+        e->count = 0;
+        e->last_seen = get_ms();
+        return 0;
+    }
+
+    // No match: insert or refresh entry
+    int target_idx = (empty_idx != -1) ? empty_idx : oldest_idx;
+    if (target_idx < 0)
+        return 0;
+
+    struct flow_log_entry *e = &table[target_idx];
+    if (e->used) {
+        // Reuse slot: flush oldest if it had counts
+        flush_flow_entry(args, e);
+    }
+
+    e->used = 1;
+    e->uid = uid;
+    e->protocol = protocol;
+    e->version = version;
+    e->dport = dport;
+    e->sport = sport;
+    e->allowed = allowed;
+    strncpy(e->daddr, daddr, sizeof(e->daddr) - 1);
+    e->daddr[sizeof(e->daddr) - 1] = '\0';
+    strncpy(e->saddr, (source != NULL) ? source : "", sizeof(e->saddr) - 1);
+    e->saddr[sizeof(e->saddr) - 1] = '\0';
+    strncpy(e->flags, (flags != NULL) ? flags : "", sizeof(e->flags) - 1);
+    e->flags[sizeof(e->flags) - 1] = '\0';
+    e->count = 0;
+    e->last_seen = get_ms();
+    return 0;
+}
+
+void flow_log_flush(const struct arguments *args, long long now_ms) {
+    if (args == NULL || args->ctx == NULL || args->ctx->flow_table == NULL)
+        return;
+}
+
 void *handle_events(void *a) {
     struct arguments *args = (struct arguments *) a;
     log_android(ANDROID_LOG_WARN, "Start events tun=%d", args->tun);
@@ -31,6 +169,10 @@ void *handle_events(void *a) {
             ng_free(args->ctx->tun_buffer, __FILE__, __LINE__);
         args->ctx->tun_buffer = ng_malloc(mtu, "tun read");
         args->ctx->tun_buffer_size = mtu;
+    }
+    if (args->ctx->flow_table == NULL) {
+        args->ctx->flow_table_size = FLOW_TABLE_SIZE;
+        args->ctx->flow_table = ng_calloc(args->ctx->flow_table_size, sizeof(struct flow_log_entry), "flow_table");
     }
 
     // Get max number of sessions
