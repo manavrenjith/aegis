@@ -569,10 +569,10 @@ struct allowed *is_address_allowed(const struct arguments *args, jobject jpacket
             *allowed.raddr = 0;
         else {
             const char *raddr = (*args->env)->GetStringUTFChars(args->env, jraddr, NULL);
-            ng_add_alloc(raddr, "raddr");
+            ng_add_alloc((void *) raddr, "raddr");
             strcpy(allowed.raddr, raddr);
             (*args->env)->ReleaseStringUTFChars(args->env, jraddr, raddr);
-            ng_delete_alloc(raddr, __FILE__, __LINE__);
+            ng_delete_alloc((void *) raddr, __FILE__, __LINE__);
         }
         allowed.rport = (uint16_t) (*args->env)->GetIntField(args->env, jallowed, fidRport);
 
