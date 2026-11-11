@@ -456,7 +456,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             long thisEnd = this.time_end > 0 ? this.time_end : this.timestamp;
             long otherEnd = other.time_end > 0 ? other.time_end : other.timestamp;
             this.time_end = Math.max(thisEnd, otherEnd);
-            if (this.dname == null && other.dname != null) {
+            if (other.dname != null && (this.dname == null || "sni".equals(other.packet.data))) {
                 this.dname = other.dname;
             }
             this.interactive = this.interactive || other.interactive;
@@ -679,12 +679,12 @@ public class AegisDatabase extends SQLiteOpenHelper {
             SQLiteDatabase db = getWritableDatabase();
             updateStmt = db.compileStatement(
                     "UPDATE log SET "
-                            + "time_end = max(coalesce(time_end, time), ?), "
-                            + "packet_count = packet_count + ?, "
-                            + "screen_off_count = screen_off_count + ?, "
-                            + "dname = COALESCE(dname, ?), "
-                            + "data = CASE WHEN ? = 'sni' THEN 'sni' ELSE data END "
-                            + "WHERE ID = ?"
+                            + "time_end = max(coalesce(time_end, time), ?1), "
+                            + "packet_count = packet_count + ?2, "
+                            + "screen_off_count = screen_off_count + ?3, "
+                            + "dname = CASE WHEN ?5 = 'sni' AND ?4 IS NOT NULL THEN ?4 ELSE COALESCE(dname, ?4) END, "
+                            + "data = CASE WHEN ?5 = 'sni' THEN 'sni' ELSE data END "
+                            + "WHERE ID = ?6"
             );
             db.beginTransaction();
             try {
