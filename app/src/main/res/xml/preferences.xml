@@ -109,7 +109,7 @@
 
 		<androidx.preference.SwitchPreferenceCompat
 			app:key="log_app"
-			app:defaultValue="false"
+			app:defaultValue="true"
 			app:iconSpaceReserved="false"
 			app:title="@string/setting_log_app"
 			app:summary="@string/summary_log_app" />

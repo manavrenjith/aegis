@@ -153,8 +153,7 @@ public class LogActivity extends BaseActivity {
     }
 
     private void updateDisabledBanner() {
-        boolean enabled = PreferenceManager.getDefaultSharedPreferences(this)
-                .getBoolean("log_app", true);
+        boolean enabled = AegisUtils.isLogEnabled(PreferenceManager.getDefaultSharedPreferences(this));
         tvDisabled.setVisibility(enabled ? View.GONE : View.VISIBLE);
     }
 
