@@ -160,13 +160,25 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         if (allowed == Packet.STATUS_OVERFLOW) {
             int count = colConnection >= 0 ? cursor.getInt(colConnection) : 0;
             holder.tvDomain.setText(count + " more destinations");
+            holder.tvAddr.setVisibility(View.GONE);
             holder.vDot.setBackground(buildDot(ContextCompat.getColor(context, R.color.color_label_tertiary)));
         } else {
-            String domain = !TextUtils.isEmpty(dname) ? dname : daddr;
-            if (dport > 0) {
-                domain = domain + ":" + dport;
+            String addr = daddr != null ? daddr : "";
+            if (dport > 0 && !addr.isEmpty()) {
+                addr = addr + ":" + dport;
             }
-            holder.tvDomain.setText(domain);
+
+            if (!TextUtils.isEmpty(dname) && !addr.isEmpty()) {
+                holder.tvDomain.setText(dname);
+                holder.tvAddr.setText(addr);
+                holder.tvAddr.setVisibility(View.VISIBLE);
+            } else if (!TextUtils.isEmpty(dname) && addr.isEmpty()) {
+                holder.tvDomain.setText(dname);
+                holder.tvAddr.setVisibility(View.GONE);
+            } else {
+                holder.tvDomain.setText(addr);
+                holder.tvAddr.setVisibility(View.GONE);
+            }
 
             holder.vDot.setBackground(buildDot(allowed == 1
                     ? ContextCompat.getColor(context, R.color.color_on)
@@ -218,6 +230,7 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         final View vDot;
         final TextView tvAppName;
         final TextView tvDomain;
+        final TextView tvAddr;
         final TextView tvTimestamp;
 
         LogViewHolder(@NonNull View itemView) {
@@ -226,6 +239,7 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
             vDot = itemView.findViewById(R.id.vDot);
             tvAppName = itemView.findViewById(R.id.tvAppName);
             tvDomain = itemView.findViewById(R.id.tvDomain);
+            tvAddr = itemView.findViewById(R.id.tvAddr);
             tvTimestamp = itemView.findViewById(R.id.tvTimestamp);
         }
     }
