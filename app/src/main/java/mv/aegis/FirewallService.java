@@ -1272,7 +1272,6 @@ public class FirewallService extends VpnService {
 
         SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
         if (AegisUtils.isLogEnabled(sp)) {
-            enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
             if (rr.Resource != null && rr.QName != null) {
                 String name = rr.QName.trim();
                 if (name.endsWith(".")) {
