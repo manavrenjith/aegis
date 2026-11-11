@@ -50,7 +50,7 @@
 
     <string name="msg_disabled">Aegis is disabled. Use the switch above to enable it.</string>
     <string name="msg_notifications">Tap to grant notification permissions.</string>
-    <string name="msg_log_disabled">Traffic logging is disabled. Use the switch above to enable it. May increase battery usage.</string>
+    <string name="msg_log_disabled">Traffic logging is off. Turn on \"Log internet access\" in Settings.</string>
     <string name="msg_usage">Tap the icons next to an app to allow or block Wi-Fi and mobile internet access.</string>
     <string name="msg_whitelist">Internet access is allowed by default (blacklist mode). This can be changed in Settings.</string>
     <string name="msg_push">Incoming push notifications are handled by system services, which are allowed internet access by default.</string>
