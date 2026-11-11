@@ -77,6 +77,23 @@
 
 struct uid_cache_entry;
 
+#define FLOW_TABLE_SIZE 2048
+
+struct flow_log_entry {
+    int used;
+    jint uid;
+    jint protocol;
+    jint version;
+    jint dport;
+    jint sport;
+    jboolean allowed;
+    char daddr[INET6_ADDRSTRLEN + 1];
+    char saddr[INET6_ADDRSTRLEN + 1];
+    char flags[32];
+    uint32_t count;
+    long long last_seen;
+};
+
 struct context {
     pthread_mutex_t lock;
     int pipefds[2];
@@ -87,6 +104,9 @@ struct context {
     struct uid_cache_entry *uid_cache;
     uint8_t *tun_buffer;
     size_t tun_buffer_size;
+    struct flow_log_entry *flow_table;
+    size_t flow_table_size;
+    int flow_dirty;
 };
 
 struct arguments {
@@ -567,6 +587,22 @@ jobject create_packet(const struct arguments *args,
                       const char *data,
                       jint uid,
                       jboolean allowed);
+
+int flow_log_absorb(const struct arguments *args,
+                    jint version,
+                    jint protocol,
+                    const char *flags,
+                    const char *source,
+                    jint sport,
+                    const char *dest,
+                    jint dport,
+                    const char *data,
+                    jint uid,
+                    jboolean allowed);
+
+void flow_log_flush(const struct arguments *args, long long now_ms);
+
+extern jfieldID fidCount;
 
 void account_usage(const struct arguments *args, jint version, jint protocol,
                    const char *daddr, jint dport, jint uid, jlong sent, jlong received);

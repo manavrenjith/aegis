@@ -16,6 +16,7 @@ public class Packet {
     public String data;
     public int uid;
     public boolean allowed;
+    public int count = 1;
     public int status = -1;
     public boolean hasCustomStatus = false;
 

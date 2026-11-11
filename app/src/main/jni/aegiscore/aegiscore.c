@@ -619,6 +619,7 @@ jfieldID fidDport = NULL;
 jfieldID fidData = NULL;
 jfieldID fidUid = NULL;
 jfieldID fidAllowed = NULL;
+jfieldID fidCount = NULL;
 
 jobject create_packet(const struct arguments *args,
                       jint version,
@@ -664,6 +665,7 @@ jobject create_packet(const struct arguments *args,
         fidData = jniGetFieldID(env, clsPacket, "data", string);
         fidUid = jniGetFieldID(env, clsPacket, "uid", "I");
         fidAllowed = jniGetFieldID(env, clsPacket, "allowed", "Z");
+        fidCount = jniGetFieldID(env, clsPacket, "count", "I");
     }
 
     struct timeval tv;

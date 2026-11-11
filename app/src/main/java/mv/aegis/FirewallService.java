@@ -1115,7 +1115,7 @@ public class FirewallService extends VpnService {
         boolean interactive = isInteractive;
         item.timestamp = now;
         item.interactive = interactive;
-        item.screenOff = interactive ? 0 : 1;
+        item.screenOff = interactive ? 0 : item.packets;
         item.time_end = now;
         if (item.packet != null) {
             item.packet.time = now;
