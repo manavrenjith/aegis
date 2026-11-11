@@ -161,13 +161,6 @@ Java_mv_aegis_FirewallService_jni_1stop(
         log_android(ANDROID_LOG_WARN, "Write pipe error %d: %s", errno, strerror(errno));
 }
 
-JNIEXPORT void JNICALL
-Java_mv_aegis_FirewallService_jni_1clear(
-        JNIEnv *env, jobject instance, jlong context) {
-    struct context *ctx = (struct context *) context;
-    clear(ctx);
-}
-
 JNIEXPORT jint JNICALL
 Java_mv_aegis_FirewallService_jni_1get_1mtu(JNIEnv *env, jobject instance) {
     return get_mtu();
@@ -576,10 +569,10 @@ struct allowed *is_address_allowed(const struct arguments *args, jobject jpacket
             *allowed.raddr = 0;
         else {
             const char *raddr = (*args->env)->GetStringUTFChars(args->env, jraddr, NULL);
-            ng_add_alloc(raddr, "raddr");
+            ng_add_alloc((void *) raddr, "raddr");
             strcpy(allowed.raddr, raddr);
             (*args->env)->ReleaseStringUTFChars(args->env, jraddr, raddr);
-            ng_delete_alloc(raddr, __FILE__, __LINE__);
+            ng_delete_alloc((void *) raddr, __FILE__, __LINE__);
         }
         allowed.rport = (uint16_t) (*args->env)->GetIntField(args->env, jallowed, fidRport);
 

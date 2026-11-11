@@ -196,8 +196,6 @@ public class FirewallService extends VpnService {
 
     private native void jni_stop(long context);
 
-    private native void jni_clear(long context);
-
     private native int jni_get_mtu();
 
     private native void jni_done(long context);
