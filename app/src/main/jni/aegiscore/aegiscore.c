@@ -161,13 +161,6 @@ Java_mv_aegis_FirewallService_jni_1stop(
         log_android(ANDROID_LOG_WARN, "Write pipe error %d: %s", errno, strerror(errno));
 }
 
-JNIEXPORT void JNICALL
-Java_mv_aegis_FirewallService_jni_1clear(
-        JNIEnv *env, jobject instance, jlong context) {
-    struct context *ctx = (struct context *) context;
-    clear(ctx);
-}
-
 JNIEXPORT jint JNICALL
 Java_mv_aegis_FirewallService_jni_1get_1mtu(JNIEnv *env, jobject instance) {
     return get_mtu();
