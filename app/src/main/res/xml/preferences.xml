@@ -118,6 +118,7 @@
 			app:key="notify_access"
 			app:defaultValue="false"
 			app:dependency="log_app"
+			app:isPreferenceVisible="false"
 			app:iconSpaceReserved="false"
 			app:title="@string/setting_access"
 			app:summary="@string/summary_access" />
