@@ -517,11 +517,12 @@ public class AegisDatabase extends SQLiteOpenHelper {
             int allowedVal,
             SQLiteStatement updateStmt,
             Map<FirewallService.UidDestKey, FlowCacheEntry> pendingCacheUpdates,
-            Set<FirewallService.UidDestKey> pendingCacheEvictions
+            Set<FirewallService.UidDestKey> pendingCacheEvictions,
+            long tzOffset
     ) {
         FirewallService.UidDestKey key = FirewallService.getBatchItemKey(item);
         long packetTime = item.packet.time;
-        long windowStart = packetTime - (packetTime % FLOW_WINDOW_MS);
+        long windowStart = Math.floorDiv(packetTime + tzOffset, FLOW_WINDOW_MS) * FLOW_WINDOW_MS - tzOffset;
 
         FlowCacheEntry cached = pendingCacheUpdates.get(key);
         if (cached == null && !pendingCacheEvictions.contains(key)) {
@@ -666,6 +667,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
         if (items == null || items.isEmpty()) {
             return;
         }
+        long tzOffset = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis());
         lock.writeLock().lock();
         boolean hasLogs = false;
         boolean hasUsage = false;
@@ -699,7 +701,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
                                 : (item.packet.allowed ? 1 : 0);
 
                         if (allowedVal == 0 || allowedVal == 1) {
-                            applyAggregatedLogInternal(db, item, allowedVal, updateStmt, pendingCacheUpdates, pendingCacheEvictions);
+                            applyAggregatedLogInternal(db, item, allowedVal, updateStmt, pendingCacheUpdates, pendingCacheEvictions, tzOffset);
                         } else {
                             applyLogInternal(db, item.packet, item.dname, item.connection, item.interactive);
                         }
