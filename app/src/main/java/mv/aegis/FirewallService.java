@@ -1268,7 +1268,10 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
+        SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
+        if (AegisUtils.isLogEnabled(sp)) {
+            enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
+        }
 
         // Best-effort domain -> uid attribution for threat logging (Feature 1/4).
         // uid is real in the TLS SNI path (ip.c) and -1 in the DNS-answer path (dns.c).
