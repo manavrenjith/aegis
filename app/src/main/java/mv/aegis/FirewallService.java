@@ -95,6 +95,7 @@ public class FirewallService extends VpnService {
     private volatile boolean tunnelStillRunning = false;
     private ThreatDetector threatDetector;
     private final ConcurrentHashMap<String, Integer> recentDomainUid = new ConcurrentHashMap<>();
+    private final android.util.LruCache<String, String> ipNames = new android.util.LruCache<>(2000);
     private final Set<Integer> seenCloneUids = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Object clonePersistLock = new Object();
 
@@ -1260,7 +1261,8 @@ public class FirewallService extends VpnService {
         if (!AegisUtils.isLogEnabled(sp)) {
             return;
         }
-        enqueueLogItem(new AegisDatabase.LogBatchItem(packet, null, 0, isInteractive));
+        String name = packet.daddr != null ? ipNames.get(packet.daddr) : null;
+        enqueueLogItem(new AegisDatabase.LogBatchItem(packet, name, 0, isInteractive));
     }
 
     public void dnsResolved(ResourceRecord rr) {
@@ -1271,6 +1273,15 @@ public class FirewallService extends VpnService {
         SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
         if (AegisUtils.isLogEnabled(sp)) {
             enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
+            if (rr.Resource != null && rr.QName != null) {
+                String name = rr.QName.trim();
+                if (name.endsWith(".")) {
+                    name = name.substring(0, name.length() - 1);
+                }
+                if (!name.isEmpty()) {
+                    ipNames.put(rr.Resource, name.toLowerCase(java.util.Locale.ROOT));
+                }
+            }
         }
 
         // Best-effort domain -> uid attribution for threat logging (Feature 1/4).
