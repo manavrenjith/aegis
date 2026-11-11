@@ -124,7 +124,7 @@ No traffic leaves the device through a remote server. The "VPN" is entirely loca
 |---|---|
 | Language | Java (no Kotlin) |
 | Min SDK | 21 (Android 5.0) |
-| Target SDK | 34 (Android 14) |
+| Target SDK | 36 (Android 16) |
 | UI | Material 3, AndroidX, RecyclerView, ConstraintLayout |
 | Network interception | `VpnService` API |
 | Packet engine | C via JNI (`libaegiscore.so`) |
