@@ -9,8 +9,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.pm.LauncherActivityInfo;
-import android.content.pm.LauncherApps;
 import android.net.ConnectivityManager;
 import android.net.VpnService;
 import android.net.VpnService.Builder;
@@ -22,10 +20,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
-import android.os.Process;
 import android.os.SystemClock;
-import android.os.UserHandle;
-import android.os.UserManager;
 import android.util.Log;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
@@ -268,38 +263,6 @@ public class FirewallService extends VpnService {
         }
 
         Log.d(TAG, "start() BEGIN");
-
-        if (com.mv.aegis.BuildConfig.DEBUG) {
-            try {
-                UserManager um = (UserManager) getSystemService(Context.USER_SERVICE);
-                LauncherApps launcherApps = (LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
-                List<UserHandle> userProfiles = (um != null) ? um.getUserProfiles() : Collections.emptyList();
-                List<UserHandle> launcherProfiles = (launcherApps != null) ? launcherApps.getProfiles() : Collections.emptyList();
-                UserHandle myUser = Process.myUserHandle();
-                Map<UserHandle, List<String>> otherProfilesApps = new HashMap<>();
-                if (launcherApps != null && launcherProfiles != null) {
-                    for (UserHandle profile : launcherProfiles) {
-                        if (!profile.equals(myUser)) {
-                            List<LauncherActivityInfo> acts = launcherApps.getActivityList(null, profile);
-                            List<String> pkgs = new ArrayList<>();
-                            if (acts != null) {
-                                for (LauncherActivityInfo lai : acts) {
-                                    if (lai.getApplicationInfo() != null && lai.getApplicationInfo().packageName != null) {
-                                        pkgs.add(lai.getApplicationInfo().packageName);
-                                    }
-                                }
-                            }
-                            otherProfilesApps.put(profile, pkgs);
-                        }
-                    }
-                }
-                Log.d(TAG, "Debug probe - userProfiles=" + userProfiles
-                        + " launcherProfiles=" + launcherProfiles
-                        + " otherProfilesApps=" + otherProfilesApps);
-            } catch (Throwable t) {
-                Log.e(TAG, "Debug probe failed", t);
-            }
-        }
 
         CountDownLatch priorTeardown = activeTeardownLatch;
         if (priorTeardown != null && priorTeardown.getCount() > 0) {
@@ -1305,7 +1268,10 @@ public class FirewallService extends VpnService {
             return;
         }
 
-        enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
+        SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
+        if (AegisUtils.isLogEnabled(sp)) {
+            enqueueLogItem(new AegisDatabase.LogBatchItem(rr));
+        }
 
         // Best-effort domain -> uid attribution for threat logging (Feature 1/4).
         // uid is real in the TLS SNI path (ip.c) and -1 in the DNS-answer path (dns.c).
