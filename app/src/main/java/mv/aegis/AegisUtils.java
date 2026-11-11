@@ -38,6 +38,12 @@ public final class AegisUtils {
         return sp.getBoolean(key, WHITELIST_DEFAULT);
     }
 
+    public static final boolean LOG_APP_DEFAULT = true;
+
+    public static boolean isLogEnabled(SharedPreferences sp) {
+        return sp.getBoolean("log_app", LOG_APP_DEFAULT);
+    }
+
     private AegisUtils() {
     }
 
