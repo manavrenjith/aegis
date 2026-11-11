@@ -44,6 +44,7 @@
 		<androidx.preference.SwitchPreferenceCompat
 			app:key="whitelist_roaming"
 			app:defaultValue="false"
+			app:isPreferenceVisible="false"
 			app:iconSpaceReserved="false"
 			app:title="@string/setting_whitelist_roaming" />
 	</PreferenceScreen>
