@@ -21,6 +21,7 @@ import com.mv.aegis.R;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 public class AppDetailActivity extends BaseActivity {
 
@@ -34,6 +35,7 @@ public class AppDetailActivity extends BaseActivity {
     private FirewallRule rule = null;
     private AdapterAccess adapterAccess = null;
     private boolean running = false;
+    private boolean accessLoading = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -65,8 +67,9 @@ public class AppDetailActivity extends BaseActivity {
         ImageButton ibBack = findViewById(R.id.ibBack);
         ibBack.setOnClickListener(v -> finish());
 
-        loadRule();
         setupAccessList();
+        refreshAccess();
+        loadRule();
     }
 
     @Override
@@ -92,8 +95,18 @@ public class AppDetailActivity extends BaseActivity {
         super.onDestroy();
     }
 
+    private void runBg(Runnable r) {
+        if (!running) {
+            return;
+        }
+        try {
+            executor.execute(r);
+        } catch (RejectedExecutionException ignored) {
+        }
+    }
+
     private void loadRule() {
-        executor.execute(() -> {
+        runBg(() -> {
             FirewallRule foundRule = null;
             try {
                 List<FirewallRule> rules = FirewallRule.getRules(true, this);
@@ -106,6 +119,7 @@ public class AppDetailActivity extends BaseActivity {
 
                 FirewallRule finalFoundRule = foundRule;
                 handler.post(() -> {
+                    if (!running) return;
                     rule = finalFoundRule;
                     bindRuleToUI();
                 });
@@ -129,7 +143,7 @@ public class AppDetailActivity extends BaseActivity {
 
         ImageView ivAppIcon = findViewById(R.id.ivAppIcon);
         final String iconPackage = packageName;
-        executor.execute(() -> {
+        runBg(() -> {
             Drawable drawable;
             try {
                 drawable = getPackageManager().getApplicationIcon(iconPackage);
@@ -200,27 +214,13 @@ public class AppDetailActivity extends BaseActivity {
     }
 
     private void refreshUsage() {
-        executor.execute(() -> {
-            long sent = 0L;
-            long received = 0L;
-            Cursor cursor = null;
+        runBg(() -> {
             try {
-                cursor = AegisDatabase.getInstance(this).getUsageByApp();
-                int colUid = cursor.getColumnIndex("uid");
-                int colSent = cursor.getColumnIndex("total_sent");
-                int colReceived = cursor.getColumnIndex("total_received");
-
-                while (cursor.moveToNext()) {
-                    if (colUid >= 0 && cursor.getInt(colUid) == uid) {
-                        sent = colSent >= 0 ? cursor.getLong(colSent) : 0L;
-                        received = colReceived >= 0 ? cursor.getLong(colReceived) : 0L;
-                        break;
-                    }
-                }
-
-                long finalSent = sent;
-                long finalReceived = received;
+                long[] usage = AegisDatabase.getInstance(this).getUsageForUid(uid);
+                long finalSent = usage[0];
+                long finalReceived = usage[1];
                 handler.post(() -> {
+                    if (!running) return;
                     TextView tvTotalSent = findViewById(R.id.tvTotalSent);
                     TextView tvTotalReceived = findViewById(R.id.tvTotalReceived);
                     tvTotalSent.setText(AegisUtils.formatBytes(finalSent));
@@ -228,31 +228,50 @@ public class AppDetailActivity extends BaseActivity {
                 });
             } catch (Throwable throwable) {
                 Log.e(TAG, "Failed to refresh usage", throwable);
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
             }
         });
     }
 
     private void setupAccessList() {
         android.widget.ListView lvAccess = findViewById(R.id.lvAccess);
-        Cursor cursor = AegisDatabase.getInstance(this).getAccess(uid);
-        adapterAccess = new AdapterAccess(this, cursor);
+        adapterAccess = new AdapterAccess(this, null);
         lvAccess.setAdapter(adapterAccess);
     }
 
     private void refreshAccess() {
-        try {
-            Cursor cursor = AegisDatabase.getInstance(this).getAccess(uid);
-            if (adapterAccess != null) {
-                adapterAccess.changeCursor(cursor);
-            }
-            refreshUsage();
-        } catch (Throwable throwable) {
-            Log.e(TAG, "Failed to refresh access", throwable);
+        if (!running || accessLoading) {
+            return;
         }
+        accessLoading = true;
+        runBg(() -> {
+            Cursor cursor = null;
+            try {
+                cursor = AegisDatabase.getInstance(this).getAccess(uid);
+                if (cursor != null) {
+                    cursor.getCount();
+                }
+                Cursor finalCursor = cursor;
+                handler.post(() -> {
+                    accessLoading = false;
+                    if (!running || adapterAccess == null) {
+                        if (finalCursor != null) {
+                            finalCursor.close();
+                        }
+                        return;
+                    }
+                    adapterAccess.changeCursor(finalCursor);
+                });
+            } catch (Throwable throwable) {
+                Log.e(TAG, "Failed to refresh access", throwable);
+                if (cursor != null) {
+                    cursor.close();
+                }
+                handler.post(() -> {
+                    accessLoading = false;
+                });
+            }
+        });
+        refreshUsage();
     }
 }
 
