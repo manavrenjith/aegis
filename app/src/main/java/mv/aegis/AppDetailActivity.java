@@ -201,25 +201,10 @@ public class AppDetailActivity extends BaseActivity {
 
     private void refreshUsage() {
         executor.execute(() -> {
-            long sent = 0L;
-            long received = 0L;
-            Cursor cursor = null;
             try {
-                cursor = AegisDatabase.getInstance(this).getUsageByApp();
-                int colUid = cursor.getColumnIndex("uid");
-                int colSent = cursor.getColumnIndex("total_sent");
-                int colReceived = cursor.getColumnIndex("total_received");
-
-                while (cursor.moveToNext()) {
-                    if (colUid >= 0 && cursor.getInt(colUid) == uid) {
-                        sent = colSent >= 0 ? cursor.getLong(colSent) : 0L;
-                        received = colReceived >= 0 ? cursor.getLong(colReceived) : 0L;
-                        break;
-                    }
-                }
-
-                long finalSent = sent;
-                long finalReceived = received;
+                long[] usage = AegisDatabase.getInstance(this).getUsageForUid(uid);
+                long finalSent = usage[0];
+                long finalReceived = usage[1];
                 handler.post(() -> {
                     TextView tvTotalSent = findViewById(R.id.tvTotalSent);
                     TextView tvTotalReceived = findViewById(R.id.tvTotalReceived);
@@ -228,10 +213,6 @@ public class AppDetailActivity extends BaseActivity {
                 });
             } catch (Throwable throwable) {
                 Log.e(TAG, "Failed to refresh usage", throwable);
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
             }
         });
     }
