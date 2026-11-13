@@ -21,6 +21,7 @@ import com.mv.aegis.R;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 public class AppDetailActivity extends BaseActivity {
 
@@ -92,8 +93,18 @@ public class AppDetailActivity extends BaseActivity {
         super.onDestroy();
     }
 
+    private void runBg(Runnable r) {
+        if (!running) {
+            return;
+        }
+        try {
+            executor.execute(r);
+        } catch (RejectedExecutionException ignored) {
+        }
+    }
+
     private void loadRule() {
-        executor.execute(() -> {
+        runBg(() -> {
             FirewallRule foundRule = null;
             try {
                 List<FirewallRule> rules = FirewallRule.getRules(true, this);
@@ -106,6 +117,7 @@ public class AppDetailActivity extends BaseActivity {
 
                 FirewallRule finalFoundRule = foundRule;
                 handler.post(() -> {
+                    if (!running) return;
                     rule = finalFoundRule;
                     bindRuleToUI();
                 });
@@ -129,7 +141,7 @@ public class AppDetailActivity extends BaseActivity {
 
         ImageView ivAppIcon = findViewById(R.id.ivAppIcon);
         final String iconPackage = packageName;
-        executor.execute(() -> {
+        runBg(() -> {
             Drawable drawable;
             try {
                 drawable = getPackageManager().getApplicationIcon(iconPackage);
@@ -200,12 +212,13 @@ public class AppDetailActivity extends BaseActivity {
     }
 
     private void refreshUsage() {
-        executor.execute(() -> {
+        runBg(() -> {
             try {
                 long[] usage = AegisDatabase.getInstance(this).getUsageForUid(uid);
                 long finalSent = usage[0];
                 long finalReceived = usage[1];
                 handler.post(() -> {
+                    if (!running) return;
                     TextView tvTotalSent = findViewById(R.id.tvTotalSent);
                     TextView tvTotalReceived = findViewById(R.id.tvTotalReceived);
                     tvTotalSent.setText(AegisUtils.formatBytes(finalSent));
