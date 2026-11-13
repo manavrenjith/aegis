@@ -56,6 +56,7 @@ public class HomeActivity extends BaseActivity {
     private ExecutorService executor = Executors.newSingleThreadExecutor();
     private Handler handler = new Handler(Looper.getMainLooper());
     private AdapterRule adapter = null;
+    private long totalBytes = 0L;
 
     private final BroadcastReceiver onRulesChanged = new BroadcastReceiver() {
         @Override
@@ -268,6 +269,14 @@ public class HomeActivity extends BaseActivity {
                 Log.e("HomeActivity", "Failed to load firewall rules", throwable);
             }
 
+            long[] totals = null;
+            try {
+                totals = AegisDatabase.getInstance(this).getUsageTotals();
+            } catch (Throwable t) {
+                Log.e("HomeActivity", "Failed to load usage totals", t);
+            }
+            final long[] finalTotals = totals;
+
             List<FirewallRule> finalRules = rules;
             handler.post(() -> {
                 if (adapter != null) {
@@ -278,6 +287,9 @@ public class HomeActivity extends BaseActivity {
                 }
                 if (swipeRefresh != null) {
                     swipeRefresh.setRefreshing(false);
+                }
+                if (finalTotals != null) {
+                    totalBytes = finalTotals[0] + finalTotals[1];
                 }
                 updateStatCards();
                 updateThreatCard();
@@ -304,7 +316,7 @@ public class HomeActivity extends BaseActivity {
         tvAppsBlocked.setText(String.valueOf(blocked));
 
         TextView tvDataToday = findViewById(R.id.tvDataToday);
-        tvDataToday.setText("0 B"); // TODO: wire AegisDatabase.getTodayUsage()
+        tvDataToday.setText(AegisUtils.formatBytes(totalBytes));
     }
 
     /**
