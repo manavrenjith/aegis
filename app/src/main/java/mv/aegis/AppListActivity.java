@@ -21,6 +21,10 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.mv.aegis.R;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+
 public class AppListActivity extends BaseActivity {
     private static final String TAG = "Aegis.Activity";
     private static final long REFRESH_INTERVAL_MS = 3000L;
@@ -28,7 +32,11 @@ public class AppListActivity extends BaseActivity {
     private AdapterActivity adapter = null;
     private Cursor cursor = null;
     private boolean running = false;
+    private boolean refreshing = false;
+    private boolean refreshPending = false;
+    private boolean firstLoadDone = false;
     private final Handler refreshHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private final Runnable refreshRunnable = new Runnable() {
         @Override
@@ -49,6 +57,16 @@ public class AppListActivity extends BaseActivity {
         }
     };
 
+    private void runBg(Runnable r) {
+        if (!running) {
+            return;
+        }
+        try {
+            executor.execute(r);
+        } catch (RejectedExecutionException ignored) {
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         AegisUtils.setTheme(this);
@@ -65,7 +83,6 @@ public class AppListActivity extends BaseActivity {
             getSupportActionBar().hide();
         }
 
-
         ImageButton ibResetUsage = findViewById(R.id.ibResetUsage);
         if (ibResetUsage != null) {
             ibResetUsage.setOnClickListener(v -> new MaterialAlertDialogBuilder(this)
@@ -77,8 +94,7 @@ public class AppListActivity extends BaseActivity {
         }
 
         ListView lvActivity = findViewById(R.id.lvActivity);
-        cursor = AegisDatabase.getInstance(this).getUsageByApp();
-        adapter = new AdapterActivity(this, cursor);
+        adapter = new AdapterActivity(this, null);
         lvActivity.setAdapter(adapter);
         lvActivity.setOnItemClickListener((parent, view, position, id) -> {
             Cursor item = (Cursor) adapter.getItem(position);
@@ -92,8 +108,7 @@ public class AppListActivity extends BaseActivity {
             startActivity(detail);
         });
 
-        updateSummaryCard();
-        updateEmptyState();
+        refresh();
     }
 
     @Override
@@ -117,6 +132,7 @@ public class AppListActivity extends BaseActivity {
     protected void onDestroy() {
         running = false;
         refreshHandler.removeCallbacks(refreshRunnable);
+        executor.shutdown();
         if (cursor != null) {
             cursor.close();
             cursor = null;
@@ -128,34 +144,11 @@ public class AppListActivity extends BaseActivity {
         super.onDestroy();
     }
 
-    private void updateSummaryCard() {
-        Cursor usageCursor = null;
-        long totalSent = 0L;
-        long totalReceived = 0L;
-
-        try {
-            usageCursor = AegisDatabase.getInstance(this).getUsageByApp();
-            int colSent = usageCursor.getColumnIndex("total_sent");
-            int colReceived = usageCursor.getColumnIndex("total_received");
-
-            while (usageCursor.moveToNext()) {
-                if (colSent >= 0) {
-                    totalSent += usageCursor.getLong(colSent);
-                }
-                if (colReceived >= 0) {
-                    totalReceived += usageCursor.getLong(colReceived);
-                }
-            }
-        } catch (Throwable ex) {
-            Log.e(TAG, "Unable to update summary", ex);
-        } finally {
-            if (usageCursor != null) {
-                usageCursor.close();
-            }
-        }
-
+    private void updateSummaryCard(long[] totals) {
         TextView tvTotalSent = findViewById(R.id.tvTotalSent);
         TextView tvTotalReceived = findViewById(R.id.tvTotalReceived);
+        long totalSent = (totals != null && totals.length > 0) ? totals[0] : 0L;
+        long totalReceived = (totals != null && totals.length > 1) ? totals[1] : 0L;
         if (tvTotalSent != null) {
             tvTotalSent.setText(AegisUtils.formatBytes(totalSent));
         }
@@ -165,6 +158,9 @@ public class AppListActivity extends BaseActivity {
     }
 
     private void updateEmptyState() {
+        if (!firstLoadDone) {
+            return;
+        }
         TextView tvNoUsage = findViewById(R.id.tvNoUsage);
         if (tvNoUsage == null) {
             return;
@@ -189,28 +185,53 @@ public class AppListActivity extends BaseActivity {
     }
 
     private void refresh() {
-        Cursor next = null;
-        try {
-            next = AegisDatabase.getInstance(this).getUsageByApp();
-            if (adapter != null) {
-                Cursor old = adapter.swapCursor(next);
-                if (old != null && !old.isClosed()) {
-                    old.close();
+        if (!running) {
+            return;
+        }
+        if (refreshing) {
+            refreshPending = true;
+            return;
+        }
+        refreshing = true;
+        runBg(() -> {
+            Cursor next = null;
+            try {
+                next = AegisDatabase.getInstance(this).getUsageByApp();
+                if (next != null) {
+                    next.getCount();
                 }
-                cursor = next;
-            } else {
+                long[] totals = AegisDatabase.getInstance(this).getUsageTotals();
+                Cursor finalNext = next;
+                refreshHandler.post(() -> {
+                    refreshing = false;
+                    if (!running || adapter == null) {
+                        if (finalNext != null) {
+                            finalNext.close();
+                        }
+                        return;
+                    }
+                    Cursor old = adapter.swapCursor(finalNext);
+                    if (old != null && !old.isClosed()) {
+                        old.close();
+                    }
+                    cursor = finalNext;
+                    updateSummaryCard(totals);
+                    firstLoadDone = true;
+                    updateEmptyState();
+                    if (refreshPending) {
+                        refreshPending = false;
+                        refresh();
+                    }
+                });
+            } catch (Throwable ex) {
+                Log.e(TAG, "Unable to refresh activity", ex);
                 if (next != null) {
                     next.close();
                 }
+                refreshHandler.post(() -> {
+                    refreshing = false;
+                });
             }
-        } catch (Throwable ex) {
-            if (next != null) {
-                next.close();
-            }
-            Log.e(TAG, "Unable to refresh activity", ex);
-        }
-
-        updateSummaryCard();
-        updateEmptyState();
+        });
     }
 }
