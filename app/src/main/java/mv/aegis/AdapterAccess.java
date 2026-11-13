@@ -12,8 +12,6 @@ import android.widget.TextView;
 
 import com.mv.aegis.R;
 
-import java.text.SimpleDateFormat;
-
 public class AdapterAccess extends CursorAdapter {
     private static final String TAG = "Aegis.Access";
 
@@ -31,9 +29,13 @@ public class AdapterAccess extends CursorAdapter {
     private int colorOn;
     private int colorOff;
     private int iconSize;
+    private final java.text.DateFormat dateFormat;
+    private final java.text.DateFormat timeFormat;
 
     public AdapterAccess(Context context, Cursor cursor) {
         super(context, cursor, 0);
+        dateFormat = new java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault());
+        timeFormat = android.text.format.DateFormat.getTimeFormat(context);
         colId = cursor.getColumnIndex("ID");
         colVersion = cursor.getColumnIndex("version");
         colProtocol = cursor.getColumnIndex("protocol");
@@ -73,8 +75,6 @@ public class AdapterAccess extends CursorAdapter {
         long sent = cursor.isNull(colSent) ? 0 : cursor.getLong(colSent);
         long received = cursor.isNull(colReceived) ? 0 : cursor.getLong(colReceived);
         int connections = cursor.isNull(colConnections) ? 0 : cursor.getInt(colConnections);
-        int colCount = cursor.getColumnIndex("count");
-        int count = (colCount >= 0 && !cursor.isNull(colCount)) ? cursor.getInt(colCount) : 0;
 
         TextView tvDAddr = view.findViewById(R.id.tvDest);
         TextView tvDPort = null; // merged into tvDest
@@ -89,7 +89,7 @@ public class AdapterAccess extends CursorAdapter {
             String dest = daddr + (dport > 0 ? "/" + dport : "");
             tvDAddr.setText(dest);
         }
-        tvTime.setText(SimpleDateFormat.getDateTimeInstance().format(time));
+        tvTime.setText(dateFormat.format(time) + "\n" + timeFormat.format(time));
 
         if (ivBlock != null) {
             if (block < 0)
