@@ -139,6 +139,7 @@ public class AppListActivity extends BaseActivity {
         }
         if (adapter != null) {
             adapter.changeCursor(null);
+            adapter.close();
         }
         adapter = null;
         super.onDestroy();
