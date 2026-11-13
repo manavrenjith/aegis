@@ -68,6 +68,7 @@ public class AppDetailActivity extends BaseActivity {
         ibBack.setOnClickListener(v -> finish());
 
         setupAccessList();
+        refreshAccess();
         loadRule();
     }
 
