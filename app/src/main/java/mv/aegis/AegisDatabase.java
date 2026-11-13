@@ -1144,6 +1144,7 @@ public class AegisDatabase extends SQLiteOpenHelper {
             SQLiteDatabase db = getWritableDatabase();
             if (uid < 0) {
                 db.delete("log", null, null);
+                db.delete("dns", null, null);
             } else {
                 db.delete("log", "uid = ?", new String[]{String.valueOf(uid)});
             }
