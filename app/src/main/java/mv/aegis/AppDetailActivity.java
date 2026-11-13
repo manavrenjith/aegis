@@ -35,6 +35,7 @@ public class AppDetailActivity extends BaseActivity {
     private FirewallRule rule = null;
     private AdapterAccess adapterAccess = null;
     private boolean running = false;
+    private boolean accessLoading = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -66,8 +67,8 @@ public class AppDetailActivity extends BaseActivity {
         ImageButton ibBack = findViewById(R.id.ibBack);
         ibBack.setOnClickListener(v -> finish());
 
-        loadRule();
         setupAccessList();
+        loadRule();
     }
 
     @Override
@@ -232,21 +233,44 @@ public class AppDetailActivity extends BaseActivity {
 
     private void setupAccessList() {
         android.widget.ListView lvAccess = findViewById(R.id.lvAccess);
-        Cursor cursor = AegisDatabase.getInstance(this).getAccess(uid);
-        adapterAccess = new AdapterAccess(this, cursor);
+        adapterAccess = new AdapterAccess(this, null);
         lvAccess.setAdapter(adapterAccess);
     }
 
     private void refreshAccess() {
-        try {
-            Cursor cursor = AegisDatabase.getInstance(this).getAccess(uid);
-            if (adapterAccess != null) {
-                adapterAccess.changeCursor(cursor);
-            }
-            refreshUsage();
-        } catch (Throwable throwable) {
-            Log.e(TAG, "Failed to refresh access", throwable);
+        if (!running || accessLoading) {
+            return;
         }
+        accessLoading = true;
+        runBg(() -> {
+            Cursor cursor = null;
+            try {
+                cursor = AegisDatabase.getInstance(this).getAccess(uid);
+                if (cursor != null) {
+                    cursor.getCount();
+                }
+                Cursor finalCursor = cursor;
+                handler.post(() -> {
+                    accessLoading = false;
+                    if (!running || adapterAccess == null) {
+                        if (finalCursor != null) {
+                            finalCursor.close();
+                        }
+                        return;
+                    }
+                    adapterAccess.changeCursor(finalCursor);
+                });
+            } catch (Throwable throwable) {
+                Log.e(TAG, "Failed to refresh access", throwable);
+                if (cursor != null) {
+                    cursor.close();
+                }
+                handler.post(() -> {
+                    accessLoading = false;
+                });
+            }
+        });
+        refreshUsage();
     }
 }
 

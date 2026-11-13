@@ -34,17 +34,7 @@ public class AdapterAccess extends CursorAdapter {
 
     public AdapterAccess(Context context, Cursor cursor) {
         super(context, cursor, 0);
-        colId = cursor.getColumnIndex("ID");
-        colVersion = cursor.getColumnIndex("version");
-        colProtocol = cursor.getColumnIndex("protocol");
-        colDAddr = cursor.getColumnIndex("daddr");
-        colDPort = cursor.getColumnIndex("dport");
-        colTime = cursor.getColumnIndex("time");
-        colAllowed = cursor.getColumnIndex("allowed");
-        colBlock = cursor.getColumnIndex("block");
-        colSent = cursor.getColumnIndex("sent");
-        colReceived = cursor.getColumnIndex("received");
-        colConnections = cursor.getColumnIndex("connections");
+        updateColumnIndexes(cursor);
 
         TypedValue tv = new TypedValue();
         context.getTheme().resolveAttribute(R.attr.colorOn, tv, true);
@@ -53,6 +43,28 @@ public class AdapterAccess extends CursorAdapter {
         colorOff = tv.data;
 
         iconSize = AegisUtils.dips2pixels(24, context);
+    }
+
+    private void updateColumnIndexes(Cursor cursor) {
+        if (cursor != null) {
+            colId = cursor.getColumnIndex("ID");
+            colVersion = cursor.getColumnIndex("version");
+            colProtocol = cursor.getColumnIndex("protocol");
+            colDAddr = cursor.getColumnIndex("daddr");
+            colDPort = cursor.getColumnIndex("dport");
+            colTime = cursor.getColumnIndex("time");
+            colAllowed = cursor.getColumnIndex("allowed");
+            colBlock = cursor.getColumnIndex("block");
+            colSent = cursor.getColumnIndex("sent");
+            colReceived = cursor.getColumnIndex("received");
+            colConnections = cursor.getColumnIndex("connections");
+        }
+    }
+
+    @Override
+    public Cursor swapCursor(Cursor newCursor) {
+        updateColumnIndexes(newCursor);
+        return super.swapCursor(newCursor);
     }
 
     @Override
