@@ -12,8 +12,6 @@ import android.widget.TextView;
 
 import com.mv.aegis.R;
 
-import java.text.SimpleDateFormat;
-
 public class AdapterAccess extends CursorAdapter {
     private static final String TAG = "Aegis.Access";
 
@@ -31,20 +29,14 @@ public class AdapterAccess extends CursorAdapter {
     private int colorOn;
     private int colorOff;
     private int iconSize;
+    private final java.text.DateFormat dateFormat;
+    private final java.text.DateFormat timeFormat;
 
     public AdapterAccess(Context context, Cursor cursor) {
         super(context, cursor, 0);
-        colId = cursor.getColumnIndex("ID");
-        colVersion = cursor.getColumnIndex("version");
-        colProtocol = cursor.getColumnIndex("protocol");
-        colDAddr = cursor.getColumnIndex("daddr");
-        colDPort = cursor.getColumnIndex("dport");
-        colTime = cursor.getColumnIndex("time");
-        colAllowed = cursor.getColumnIndex("allowed");
-        colBlock = cursor.getColumnIndex("block");
-        colSent = cursor.getColumnIndex("sent");
-        colReceived = cursor.getColumnIndex("received");
-        colConnections = cursor.getColumnIndex("connections");
+        dateFormat = new java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault());
+        timeFormat = android.text.format.DateFormat.getTimeFormat(context);
+        updateColumnIndexes(cursor);
 
         TypedValue tv = new TypedValue();
         context.getTheme().resolveAttribute(R.attr.colorOn, tv, true);
@@ -53,6 +45,28 @@ public class AdapterAccess extends CursorAdapter {
         colorOff = tv.data;
 
         iconSize = AegisUtils.dips2pixels(24, context);
+    }
+
+    private void updateColumnIndexes(Cursor cursor) {
+        if (cursor != null) {
+            colId = cursor.getColumnIndex("ID");
+            colVersion = cursor.getColumnIndex("version");
+            colProtocol = cursor.getColumnIndex("protocol");
+            colDAddr = cursor.getColumnIndex("daddr");
+            colDPort = cursor.getColumnIndex("dport");
+            colTime = cursor.getColumnIndex("time");
+            colAllowed = cursor.getColumnIndex("allowed");
+            colBlock = cursor.getColumnIndex("block");
+            colSent = cursor.getColumnIndex("sent");
+            colReceived = cursor.getColumnIndex("received");
+            colConnections = cursor.getColumnIndex("connections");
+        }
+    }
+
+    @Override
+    public Cursor swapCursor(Cursor newCursor) {
+        updateColumnIndexes(newCursor);
+        return super.swapCursor(newCursor);
     }
 
     @Override
@@ -73,8 +87,6 @@ public class AdapterAccess extends CursorAdapter {
         long sent = cursor.isNull(colSent) ? 0 : cursor.getLong(colSent);
         long received = cursor.isNull(colReceived) ? 0 : cursor.getLong(colReceived);
         int connections = cursor.isNull(colConnections) ? 0 : cursor.getInt(colConnections);
-        int colCount = cursor.getColumnIndex("count");
-        int count = (colCount >= 0 && !cursor.isNull(colCount)) ? cursor.getInt(colCount) : 0;
 
         TextView tvDAddr = view.findViewById(R.id.tvDest);
         TextView tvDPort = null; // merged into tvDest
@@ -89,7 +101,7 @@ public class AdapterAccess extends CursorAdapter {
             String dest = daddr + (dport > 0 ? "/" + dport : "");
             tvDAddr.setText(dest);
         }
-        tvTime.setText(SimpleDateFormat.getDateTimeInstance().format(time));
+        tvTime.setText(dateFormat.format(time) + "\n" + timeFormat.format(time));
 
         if (ivBlock != null) {
             if (block < 0)

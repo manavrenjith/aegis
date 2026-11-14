@@ -1260,6 +1260,46 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
+    public long[] getUsageForUid(int uid) {
+        lock.readLock().lock();
+        Cursor cursor = null;
+        try {
+            cursor = getReadableDatabase().rawQuery(
+                    "SELECT COALESCE(SUM(sent),0), COALESCE(SUM(received),0) FROM access WHERE uid = ?",
+                    new String[]{String.valueOf(uid)}
+            );
+            if (cursor != null && cursor.moveToFirst()) {
+                return new long[]{cursor.getLong(0), cursor.getLong(1)};
+            }
+            return new long[]{0L, 0L};
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            lock.readLock().unlock();
+        }
+    }
+
+    public long[] getUsageTotals() {
+        lock.readLock().lock();
+        Cursor cursor = null;
+        try {
+            cursor = getReadableDatabase().rawQuery(
+                    "SELECT COALESCE(SUM(sent),0), COALESCE(SUM(received),0) FROM access WHERE sent > 0 OR received > 0",
+                    null
+            );
+            if (cursor != null && cursor.moveToFirst()) {
+                return new long[]{cursor.getLong(0), cursor.getLong(1)};
+            }
+            return new long[]{0L, 0L};
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            lock.readLock().unlock();
+        }
+    }
+
     public void insertDns(ResourceRecord rr) {
         if (rr == null) {
             return;
