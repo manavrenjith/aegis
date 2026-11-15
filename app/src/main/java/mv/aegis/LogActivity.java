@@ -166,6 +166,7 @@ public class LogActivity extends BaseActivity {
 
     @Override
     protected void onDestroy() {
+        adapter.swapCursor(null);
         executor.shutdownNow();
         super.onDestroy();
     }
@@ -214,6 +215,10 @@ public class LogActivity extends BaseActivity {
 
                 final Cursor result = cursor;
                 handler.post(() -> {
+                    if (isDestroyed()) {
+                        if (result != null) result.close();
+                        return;
+                    }
                     LinearLayoutManager lm = (LinearLayoutManager) rvLog.getLayoutManager();
                     int firstPos = lm != null ? lm.findFirstVisibleItemPosition() : 0;
                     int offset = 0;
