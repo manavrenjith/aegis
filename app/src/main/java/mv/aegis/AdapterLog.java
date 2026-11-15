@@ -7,6 +7,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.LruCache;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,6 +32,8 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
     private final DateFormat dateTimeFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
     private final DateFormat timeFormat = DateFormat.getTimeInstance(DateFormat.SHORT);
     private static final long DAY_IN_MILLIS = 86400000L;
+    private final LruCache<Integer, String> nameCache;
+    private final LruCache<Integer, Drawable.ConstantState> iconCache;
 
     private Cursor cursor;
     private int colId = -1;
@@ -49,6 +52,8 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         this.context = context;
         this.inflater = LayoutInflater.from(context);
         this.packageManager = context.getPackageManager();
+        this.nameCache = new LruCache<>(200);
+        this.iconCache = new LruCache<>(100);
         setHasStableIds(true);
     }
 
@@ -108,18 +113,21 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
         int allowed = colAllowed >= 0 ? cursor.getInt(colAllowed) : 0;
 
         try {
-            String appName;
-            if (isNullUid || uid < 0) {
-                appName = "Unknown app";
-            } else {
-                List<String> names = AegisUtils.getApplicationNames(uid, context);
-                if (!names.isEmpty()) {
-                    appName = TextUtils.join(", ", names);
-                } else if (AegisUtils.isCloneUid(uid)) {
-                    appName = "UID:" + (uid % 100000) + AegisUtils.cloneSuffix(uid, context);
+            String appName = nameCache.get(uid);
+            if (appName == null) {
+                if (isNullUid || uid < 0) {
+                    appName = "Unknown app";
                 } else {
-                    appName = "UID:" + uid;
+                    List<String> names = AegisUtils.getApplicationNames(uid, context);
+                    if (!names.isEmpty()) {
+                        appName = TextUtils.join(", ", names);
+                    } else if (AegisUtils.isCloneUid(uid)) {
+                        appName = "UID:" + (uid % 100000) + AegisUtils.cloneSuffix(uid, context);
+                    } else {
+                        appName = "UID:" + uid;
+                    }
                 }
+                nameCache.put(uid, appName);
             }
             holder.tvAppName.setText(appName);
             holder.ivAppIcon.setImageDrawable(resolveIcon(uid));
@@ -202,10 +210,22 @@ public class AdapterLog extends RecyclerView.Adapter<AdapterLog.LogViewHolder> {
     }
 
     private Drawable resolveIcon(int uid) {
+        Drawable.ConstantState state = iconCache.get(uid);
+        if (state != null) {
+            return state.newDrawable(context.getResources());
+        }
+
         String[] packages = AegisUtils.packagesForUid(packageManager, uid);
         if (packages != null && packages.length > 0) {
             try {
-                return packageManager.getApplicationIcon(packages[0]);
+                Drawable icon = packageManager.getApplicationIcon(packages[0]);
+                if (icon != null) {
+                    Drawable.ConstantState cs = icon.getConstantState();
+                    if (cs != null) {
+                        iconCache.put(uid, cs);
+                    }
+                    return icon;
+                }
             } catch (PackageManager.NameNotFoundException ignored) {
                 // Fall through to default icon.
             }
