@@ -107,6 +107,7 @@ public class HomeActivity extends BaseActivity {
         rvApplication.setHasFixedSize(false);
         rvApplication.setLayoutManager(new LinearLayoutManager(this));
         adapter = new AdapterRule(this);
+        adapter.setOnRuleToggledListener(this::updateStatCards);
         rvApplication.setAdapter(adapter);
 
         Chip chipAll = findViewById(R.id.chipAll);
@@ -298,17 +299,22 @@ public class HomeActivity extends BaseActivity {
     }
 
     private void updateStatCards() {
-        android.content.SharedPreferences wifi = getSharedPreferences("wifi", MODE_PRIVATE);
-        android.content.SharedPreferences other = getSharedPreferences("other", MODE_PRIVATE);
+        int blocked;
+        if (adapter != null && adapter.hasRules()) {
+            blocked = adapter.countBlocked();
+        } else {
+            android.content.SharedPreferences wifi = getSharedPreferences("wifi", MODE_PRIVATE);
+            android.content.SharedPreferences other = getSharedPreferences("other", MODE_PRIVATE);
 
-        Set<String> keys = new HashSet<>();
-        keys.addAll(wifi.getAll().keySet());
-        keys.addAll(other.getAll().keySet());
+            Set<String> keys = new HashSet<>();
+            keys.addAll(wifi.getAll().keySet());
+            keys.addAll(other.getAll().keySet());
 
-        int blocked = 0;
-        for (String key : keys) {
-            if (wifi.getBoolean(key, false) || other.getBoolean(key, false)) {
-                blocked++;
+            blocked = 0;
+            for (String key : keys) {
+                if (wifi.getBoolean(key, false) || other.getBoolean(key, false)) {
+                    blocked++;
+                }
             }
         }
 
