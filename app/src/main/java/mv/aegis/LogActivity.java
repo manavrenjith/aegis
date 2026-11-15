@@ -34,6 +34,9 @@ public class LogActivity extends BaseActivity {
     private static final String TAG = "Aegis.Log";
     private static final long REFRESH_INTERVAL_MS = 2000L;
     private static final long DEBOUNCE_INTERVAL_MS = 1000L;
+    private static final int PAGE_SIZE = 500;
+    private static final int MAX_ROWS = 5000;
+    private int pageLimit = PAGE_SIZE;
 
     private AdapterLog adapter;
     private RecyclerView rvLog;
@@ -99,6 +102,21 @@ public class LogActivity extends BaseActivity {
 
         adapter = new AdapterLog(this);
         rvLog.setAdapter(adapter);
+        rvLog.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                if (dy > 0) {
+                    LinearLayoutManager lm = (LinearLayoutManager) recyclerView.getLayoutManager();
+                    if (lm != null
+                            && lm.findLastVisibleItemPosition() >= adapter.getItemCount() - 20
+                            && adapter.getItemCount() >= pageLimit
+                            && pageLimit < MAX_ROWS) {
+                        pageLimit = Math.min(pageLimit + PAGE_SIZE, MAX_ROWS);
+                        scheduleRefresh();
+                    }
+                }
+            }
+        });
 
         ImageButton ibClearLog = findViewById(R.id.ibClearLog);
         ibClearLog.setOnClickListener(v -> clearLog());
@@ -180,17 +198,19 @@ public class LogActivity extends BaseActivity {
         }
         lastRefreshTime = SystemClock.elapsedRealtime();
         updateDisabledBanner();
+        final int limit = pageLimit;
         executor.execute(() -> {
             Cursor cursor = null;
             try {
-                cursor = AegisDatabase.getInstance(this).getLog(
-                        true,
-                        true,
-                        true,
+                cursor = AegisDatabase.getInstance(this).getLogLimited(
                         filterShowAllowed,
                         filterShowBlocked,
-                        filterShowUnknown
+                        filterShowUnknown,
+                        limit
                 );
+                if (cursor != null) {
+                    cursor.getCount();
+                }
 
                 final Cursor result = cursor;
                 handler.post(() -> {
@@ -217,7 +237,7 @@ public class LogActivity extends BaseActivity {
                         } else {
                             int foundPos = -1;
                             if (rowId != RecyclerView.NO_ID) {
-                                int maxSearch = Math.min(newCount, firstPos + (newCount - oldCount) + 50);
+                                int maxSearch = Math.min(newCount, firstPos + Math.max(0, newCount - oldCount) + 300);
                                 for (int i = firstPos; i < maxSearch; i++) {
                                     if (adapter.getItemId(i) == rowId) {
                                         foundPos = i;
@@ -250,7 +270,10 @@ public class LogActivity extends BaseActivity {
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                     executor.execute(() -> {
                         AegisDatabase.getInstance(this).clearLog(-1);
-                        handler.post(this::scheduleRefresh);
+                        handler.post(() -> {
+                            pageLimit = PAGE_SIZE;
+                            scheduleRefresh();
+                        });
                     });
                 })
                 .setNegativeButton(android.R.string.cancel, null)
@@ -275,6 +298,7 @@ public class LogActivity extends BaseActivity {
                     filterShowUnknown = cbFilterUnknown.isChecked();
                     filterShowAllowed = cbFilterAllowed.isChecked();
                     filterShowBlocked = cbFilterBlocked.isChecked();
+                    pageLimit = PAGE_SIZE;
                     scheduleRefresh();
                 })
                 .setNegativeButton(android.R.string.cancel, null)
