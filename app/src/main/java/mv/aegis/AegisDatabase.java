@@ -1125,6 +1125,56 @@ public class AegisDatabase extends SQLiteOpenHelper {
         }
     }
 
+    public Cursor getLogLimited(boolean allowed, boolean blocked, boolean unknown, int limit) {
+        lock.readLock().lock();
+        try {
+            List<String> where = new ArrayList<>();
+
+            boolean udp = true;
+            boolean tcp = true;
+            boolean other = true;
+
+            List<String> protocolFilter = new ArrayList<>();
+            if (udp) {
+                protocolFilter.add("protocol = 17");
+            }
+            if (tcp) {
+                protocolFilter.add("protocol = 6");
+            }
+            if (other) {
+                protocolFilter.add("(protocol <> 6 AND protocol <> 17)");
+            }
+            if (protocolFilter.isEmpty()) {
+                where.add("1 = 0");
+            } else {
+                where.add("(" + String.join(" OR ", protocolFilter) + ")");
+            }
+
+            List<String> allowedFilter = new ArrayList<>();
+            if (allowed) {
+                allowedFilter.add("allowed = 1");
+            }
+            if (blocked) {
+                allowedFilter.add("allowed = 0");
+            }
+            if (allowedFilter.isEmpty()) {
+                where.add("1 = 0");
+            } else {
+                allowedFilter.add("allowed = 2");
+                where.add("(" + String.join(" OR ", allowedFilter) + ")");
+            }
+
+            if (!unknown) {
+                where.add("uid >= 0");
+            }
+
+            String sql = "SELECT ID AS _id, * FROM log WHERE " + String.join(" AND ", where) + " ORDER BY time DESC, ID DESC LIMIT " + limit;
+            return getReadableDatabase().rawQuery(sql, null);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public Cursor searchLog(String find) {
         lock.readLock().lock();
         try {
