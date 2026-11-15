@@ -31,9 +31,14 @@ import java.util.concurrent.Executors;
 
 public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> implements android.widget.Filterable {
 
+    public interface OnRuleToggledListener {
+        void onRuleToggled();
+    }
+
     private static final String TAG = "Aegis.Rule";
 
     private final Context context;
+    private OnRuleToggledListener toggledListener;
     private List<FirewallRule> listAll = new ArrayList<>();
     private List<FirewallRule> listFiltered = new ArrayList<>();
     private String currentFilter = null;
@@ -45,10 +50,28 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
         setHasStableIds(false);
     }
 
+    public void setOnRuleToggledListener(OnRuleToggledListener l) {
+        toggledListener = l;
+    }
+
     public void set(List<FirewallRule> rules) {
         listAll = new ArrayList<>(rules);
         listFiltered = new ArrayList<>(rules);
         notifyDataSetChanged();
+    }
+
+    public boolean hasRules() {
+        return !listAll.isEmpty();
+    }
+
+    public int countBlocked() {
+        int count = 0;
+        for (FirewallRule rule : listAll) {
+            if (rule.wifi_blocked || rule.other_blocked) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public void filter(String type) {
@@ -129,6 +152,7 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
             updateWifiToggle(holder.ibWifi, rule);
             FirewallRule.updateRule(context, rule);
             FirewallService.reload("wifi", context, false);
+            if (toggledListener != null) toggledListener.onRuleToggled();
         });
 
         updateOtherToggle(holder.ibOther, rule);
@@ -137,6 +161,7 @@ public class AdapterRule extends RecyclerView.Adapter<AdapterRule.ViewHolder> im
             updateOtherToggle(holder.ibOther, rule);
             FirewallRule.updateRule(context, rule);
             FirewallService.reload("other", context, false);
+            if (toggledListener != null) toggledListener.onRuleToggled();
         });
 
         LinearLayout llConfiguration = holder.itemView.findViewById(R.id.llConfiguration);
